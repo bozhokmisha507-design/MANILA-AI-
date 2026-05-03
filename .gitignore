@@ -1,0 +1,26 @@
+# Secrets
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.Python
+venv/
+env/
+
+# Logs and databases
+*.log
+*.db
+*.sqlite3
+
+# IDE
+.vscode/
+.idea/
+
+# Uploads (пользовательские файлы, не нужно в репозитории)
+uploads/
+
+# OS
+.DS_Store
+Thumbs.db
