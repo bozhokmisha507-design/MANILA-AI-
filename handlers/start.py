@@ -11,7 +11,7 @@ from yookassa import Configuration, Payment as YKPayment
 logger = logging.getLogger(__name__)
 
 WELCOME_MEDIA_FILE_ID = "BAACAgIAAxkBAAINK2m2ovEkC-IgPrVDWBdZEP3xnt2bAALjlQAC5UGxSQOUHY4Gm49-OgQ"
-OFFER_URL = "https://disk.yandex.ru/i/nMXgEPicY1r_GA"
+OFFER_URL = "https://disk.yandex.ru/i/n9V2oNKPQ4Vbrw"
 
 Configuration.account_id = Config.YKASSA_SHOP_ID
 Configuration.secret_key = Config.YKASSA_SECRET_KEY
