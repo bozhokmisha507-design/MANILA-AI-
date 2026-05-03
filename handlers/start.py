@@ -10,7 +10,7 @@ from yookassa import Configuration, Payment as YKPayment
 
 logger = logging.getLogger(__name__)
 
-WELCOME_MEDIA_FILE_ID = "BAACAgIAAxkBAAINK2m2ovEkC-IgPrVDWBdZEP3xnt2bAALjlQAC5UGxSQOUHY4Gm49-OgQ"
+WELCOME_MEDIA_FILE_ID = "BAACAgIAAxkBAAIBJ2n3gLzRDDXCJmYcMRd1bht-W1vHAAJmngACH-64S6dbeyxDvhZcOwQ"
 OFFER_URL = "https://disk.yandex.ru/i/n9V2oNKPQ4Vbrw"
 
 Configuration.account_id = Config.YKASSA_SHOP_ID
