@@ -8,7 +8,7 @@ from config import Config
 logger = logging.getLogger(__name__)
 
 class AITunnelService:
-    TIMEOUT_FLASH = 150   # увеличен, так как 8 отдельных запросов
+    TIMEOUT_FLASH = 150
     TIMEOUT_MEDIUM = 120
     TIMEOUT_HIGH = 180
 
@@ -40,7 +40,6 @@ class AITunnelService:
             subject = "this person"
         prompt = base_prompt.replace("{token}", subject)
 
-        # Найдём существующее фото
         ref_photo = next((p for p in user_photo_paths if os.path.exists(p)), None)
         if not ref_photo:
             logger.error("Нет доступных фото пользователя")
@@ -62,11 +61,10 @@ class AITunnelService:
 
         timeout = aiohttp.ClientTimeout(total=self.timeout)
         images = []
+        total_needed = 2   # ⬅️ ВРЕМЕННО: 2 фото вместо 8
 
         async with aiohttp.ClientSession() as session:
             if self.model_key == "flash":
-                # Gemini Flash: 8 отдельных запросов
-                total_needed = 8
                 for i in range(total_needed):
                     payload = {
                         "model": self.model_name,
@@ -87,30 +85,31 @@ class AITunnelService:
                                         if b64:
                                             images.append(b64)
                                             success = True
-                                            logger.info(f"Flash: фото {i+1}/8 получено")
+                                            logger.info(f"Flash: фото {i+1}/{total_needed} получено")
                                             break
                                 else:
                                     error_text = await resp.text()
-                                    logger.error(f"Flash попытка {attempt+1} для фото {i+1}: {resp.status} - {error_text[:200]}")
+                                    logger.error(f"Flash попытка {attempt+1} для фото {i+1}: HTTP {resp.status} - {error_text[:200]}")
+                        except asyncio.TimeoutError:
+                            logger.error(f"Flash попытка {attempt+1} для фото {i+1}: таймаут")
                         except Exception as e:
                             logger.error(f"Flash попытка {attempt+1} для фото {i+1}: {e}")
                         await asyncio.sleep(1.5 * (2 ** attempt))
                     if not success:
                         logger.warning(f"Flash: не удалось получить фото {i+1}")
-                    await asyncio.sleep(0.5)  # пауза между запросами
+                    await asyncio.sleep(0.5)
             else:
-                # GPT Image 2: один запрос на все 8 фото
                 payload = {
                     "model": self.model_name,
                     "prompt": prompt,
-                    "n": 8,
+                    "n": total_needed,
                     "size": self.size,
                     "response_format": "b64_json",
                     "image": image_data_url
                 }
                 if self.model_key in ("medium", "high") and self.quality:
                     payload["quality"] = self.quality
-
+                
                 for attempt in range(3):
                     try:
                         async with session.post(url, headers=headers, json=payload, timeout=timeout) as resp:
@@ -125,10 +124,10 @@ class AITunnelService:
                                     return images
                             else:
                                 error_text = await resp.text()
-                                logger.error(f"GPT попытка {attempt+1}: {resp.status} - {error_text[:200]}")
+                                logger.error(f"GPT попытка {attempt+1}: HTTP {resp.status} - {error_text[:200]}")
                     except Exception as e:
                         logger.error(f"GPT попытка {attempt+1}: {e}")
                     await asyncio.sleep(1.5 * (2 ** attempt))
 
-        logger.info(f"Итого сгенерировано {len(images)} фото для пакета (model={self.model_key})")
+        logger.info(f"Итого сгенерировано {len(images)} фото")
         return images
