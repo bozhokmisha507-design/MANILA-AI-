@@ -40,6 +40,14 @@ class Config:
             "api_model": "gpt-image-2",
             "quality": "high",
             "size": "1536x1024"
+        },
+        "pro": {
+            "name": "✨ Gemini 3 Pro (реалистичные лица, высокое качество)",
+            "price_rub": 144,          # 18₽ × 8 фото, можно изменить
+            "price_tokens": 8,         # стоимость в жетонах (за 8 фото)
+            "api_model": "gemini-3-pro-image-preview",
+            "quality": "standard",
+            "size": "1024x1024"
         }
     }
 
