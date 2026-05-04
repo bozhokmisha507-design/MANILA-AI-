@@ -8,7 +8,7 @@ from config import Config
 logger = logging.getLogger(__name__)
 
 class AITunnelService:
-    TIMEOUT_FLASH = 90
+    TIMEOUT_FLASH = 150   # увеличен, так как 8 отдельных запросов
     TIMEOUT_MEDIUM = 120
     TIMEOUT_HIGH = 180
 
@@ -39,8 +39,6 @@ class AITunnelService:
         else:
             subject = "this person"
         prompt = base_prompt.replace("{token}", subject)
-        # Не добавляем ориентацию, полагаемся на size
-        # prompt += " Landscape orientation, horizontal composition, aspect ratio 16:9, wide format."
 
         # Найдём существующее фото
         ref_photo = next((p for p in user_photo_paths if os.path.exists(p)), None)
@@ -51,7 +49,6 @@ class AITunnelService:
         try:
             with open(ref_photo, "rb") as f:
                 image_b64 = base64.b64encode(f.read()).decode("utf-8")
-                # Добавляем префикс data URL (если API требует)
                 image_data_url = f"data:image/png;base64,{image_b64}"
         except Exception as e:
             logger.error(f"Ошибка кодирования фото: {e}")
@@ -63,47 +60,75 @@ class AITunnelService:
             "Content-Type": "application/json"
         }
 
-        payload = {
-            "model": self.model_name,
-            "prompt": prompt,
-            "n": 8,
-            "size": self.size,
-            "response_format": "b64_json",
-            "image": image_data_url   # или "image": image_b64 – зависит от API
-        }
-        # Для некоторых моделей quality может не поддерживаться
-        if self.model_key in ("medium", "high") and self.quality:
-            payload["quality"] = self.quality   # возможно, "standard" или "hd"
-
         timeout = aiohttp.ClientTimeout(total=self.timeout)
         images = []
 
         async with aiohttp.ClientSession() as session:
-            for attempt in range(3):
-                try:
-                    async with session.post(url, headers=headers, json=payload, timeout=timeout) as resp:
-                        if resp.status == 200:
-                            data = await resp.json()
-                            if 'data' in data and isinstance(data['data'], list):
-                                for item in data['data']:
-                                    b64 = item.get('b64_json')
-                                    if b64 and isinstance(b64, str) and len(b64) > 100:
-                                        images.append(b64)
-                                    elif 'url' in item:
-                                        images.append(item['url'])
-                                if images:
-                                    logger.info(f"Сгенерировано {len(images)} фото для пакета")
-                                    return images
+            if self.model_key == "flash":
+                # Gemini Flash: 8 отдельных запросов
+                total_needed = 8
+                for i in range(total_needed):
+                    payload = {
+                        "model": self.model_name,
+                        "prompt": prompt,
+                        "n": 1,
+                        "size": self.size,
+                        "response_format": "b64_json",
+                        "image": image_data_url
+                    }
+                    success = False
+                    for attempt in range(3):
+                        try:
+                            async with session.post(url, headers=headers, json=payload, timeout=timeout) as resp:
+                                if resp.status == 200:
+                                    data = await resp.json()
+                                    if data.get('data') and len(data['data']) > 0:
+                                        b64 = data['data'][0].get('b64_json')
+                                        if b64:
+                                            images.append(b64)
+                                            success = True
+                                            logger.info(f"Flash: фото {i+1}/8 получено")
+                                            break
                                 else:
-                                    logger.warning(f"Нет b64_json в ответе: {data}")
+                                    error_text = await resp.text()
+                                    logger.error(f"Flash попытка {attempt+1} для фото {i+1}: {resp.status} - {error_text[:200]}")
+                        except Exception as e:
+                            logger.error(f"Flash попытка {attempt+1} для фото {i+1}: {e}")
+                        await asyncio.sleep(1.5 * (2 ** attempt))
+                    if not success:
+                        logger.warning(f"Flash: не удалось получить фото {i+1}")
+                    await asyncio.sleep(0.5)  # пауза между запросами
+            else:
+                # GPT Image 2: один запрос на все 8 фото
+                payload = {
+                    "model": self.model_name,
+                    "prompt": prompt,
+                    "n": 8,
+                    "size": self.size,
+                    "response_format": "b64_json",
+                    "image": image_data_url
+                }
+                if self.model_key in ("medium", "high") and self.quality:
+                    payload["quality"] = self.quality
+
+                for attempt in range(3):
+                    try:
+                        async with session.post(url, headers=headers, json=payload, timeout=timeout) as resp:
+                            if resp.status == 200:
+                                data = await resp.json()
+                                if 'data' in data:
+                                    for item in data['data']:
+                                        b64 = item.get('b64_json')
+                                        if b64:
+                                            images.append(b64)
+                                    logger.info(f"GPT: сгенерировано {len(images)} фото")
+                                    return images
                             else:
-                                logger.warning(f"Ответ не содержит 'data' или data не список: {data}")
-                        else:
-                            error_text = await resp.text()
-                            logger.error(f"Попытка {attempt+1}: ошибка {resp.status} - {error_text[:200]}")
-                except (aiohttp.ClientError, asyncio.TimeoutError) as e:
-                    logger.error(f"Попытка {attempt+1} не удалась: {e}")
-                    if attempt == 2:
-                        return []
-                await asyncio.sleep(1.5 * (2 ** attempt))
-        return []
+                                error_text = await resp.text()
+                                logger.error(f"GPT попытка {attempt+1}: {resp.status} - {error_text[:200]}")
+                    except Exception as e:
+                        logger.error(f"GPT попытка {attempt+1}: {e}")
+                    await asyncio.sleep(1.5 * (2 ** attempt))
+
+        logger.info(f"Итого сгенерировано {len(images)} фото для пакета (model={self.model_key})")
+        return images
