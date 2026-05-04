@@ -164,7 +164,7 @@ async def pay_with_money_callback(update: Update, context: ContextTypes.DEFAULT_
             "capture": True,
             "confirmation": {
                 "type": "redirect",
-                "return_url": f"https://t.me/bma3_bot?start=payment_{label}"
+                "return_url": f"https://t.me/BozhokAI_bot?start=payment_{label}"
             },
             "description": f"Пакетная фотосессия ({model_info['name']}, стиль {style_key})",
             "metadata": {"label": label, "user_id": user_id}
@@ -179,7 +179,12 @@ async def pay_with_money_callback(update: Update, context: ContextTypes.DEFAULT_
     keyboard = [[InlineKeyboardButton(f"💳 Оплатить {model_info['price_rub']}₽", url=payment_url)]]
     await query.edit_message_text(
         f"✨ Стоимость пакета: {model_info['price_rub']}₽\n\n"
-        "👇 Нажми кнопку для оплаты. После успешного платежа фотосессия придёт автоматически.",
+        "👇 Нажми кнопку для оплаты. Доступные способы:\n"
+        "• Банковские карты (Visa, Mastercard, МИР)\n"
+        "• SberPay – для клиентов Сбера (удобно через приложение)\n"
+        "• T-Pay – для клиентов Т-Банка\n"
+        "• СБП (Система быстрых платежей) – оплата по QR-коду\n\n"
+        "После успешного платежа фотосессия придёт автоматически.",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 

@@ -10,7 +10,7 @@ from yookassa import Configuration, Payment as YKPayment
 
 logger = logging.getLogger(__name__)
 
-WELCOME_MEDIA_FILE_ID = "BAACAgIAAxkBAAIBJ2n3gLzRDDXCJmYcMRd1bht-W1vHAAJmngACH-64S6dbeyxDvhZcOwQ"
+WELCOME_MEDIA_FILE_ID = "BAACAgIAAxkBAAIBJ2n3gLzRDDXCJmYcMRd1bht-W1vHAAJmngACH-64S6dbeyxDvhZcOwQ"  # ваш рабочий file_id
 OFFER_URL = "https://disk.yandex.ru/i/n9V2oNKPQ4Vbrw"
 
 Configuration.account_id = Config.YKASSA_SHOP_ID
@@ -30,6 +30,11 @@ async def send_welcome_message(chat_id: int, first_name: str, bot):
         f"• {Config.PACKAGE_MODELS['flash']['name']} – {Config.PACKAGE_MODELS['flash']['price_rub']}₽ / {Config.PACKAGE_MODELS['flash']['price_tokens']} жетонов\n"
         f"• {Config.PACKAGE_MODELS['medium']['name']} – {Config.PACKAGE_MODELS['medium']['price_rub']}₽ / {Config.PACKAGE_MODELS['medium']['price_tokens']} жетонов\n"
         f"• {Config.PACKAGE_MODELS['high']['name']} – {Config.PACKAGE_MODELS['high']['price_rub']}₽ / {Config.PACKAGE_MODELS['high']['price_tokens']} жетонов\n\n"
+        f"💳 *Способы оплаты:*\n"
+        f"• Банковские карты (Visa, Mastercard, МИР)\n"
+        f"• SberPay – для клиентов Сбера (удобно через приложение)\n"
+        f"• T-Pay – для клиентов Т-Банка\n"
+        f"• СБП (Система быстрых платежей) – оплата по QR-коду\n\n"
         f"👇 Жми на кнопки ниже и создавай свою идеальную фотосессию!"
     )
     try:
@@ -98,7 +103,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     else:
                         await update.message.reply_text("❌ Ошибка: данные заказа не найдены.", reply_markup=get_main_menu_keyboard())
                 else:
-                    await update.message.reply_text(f"⏳ Ваш платёж в статусе «{payment.status}».", reply_markup=get_main_menu_keyboard())
+                    await update.message.reply_text(f"⏳ Ваш платёж в статусе «{payment.status}». Если вы оплатили, подождите.", reply_markup=get_main_menu_keyboard())
             except Exception as e:
                 logger.error(f"Ошибка проверки платежа: {e}")
                 await update.message.reply_text("❌ Не удалось проверить оплату.", reply_markup=get_main_menu_keyboard())
@@ -139,6 +144,11 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"   • {Config.PACKAGE_MODELS['medium']['name']} – {Config.PACKAGE_MODELS['medium']['price_rub']}₽ / {Config.PACKAGE_MODELS['medium']['price_tokens']} жетонов\n"
         f"   • {Config.PACKAGE_MODELS['high']['name']} – {Config.PACKAGE_MODELS['high']['price_rub']}₽ / {Config.PACKAGE_MODELS['high']['price_tokens']} жетонов\n"
         "4. Оплати (рублями или жетонами) и через 1-2 минуты получи 8 фото.\n\n"
+        "💳 *Способы оплаты:*\n"
+        "• Банковские карты (Visa, Mastercard, МИР)\n"
+        "• SberPay – для клиентов Сбера\n"
+        "• T-Pay – для клиентов Т-Банка\n"
+        "• СБП (Система быстрых платежей) – оплата по QR-коду\n\n"
         "**💎 Жетоны**\n"
         "• Пополнить баланс: /buy20 или кнопка «💎 Мои жетоны»\n"
         "• 1 пакет жетонов = 20 шт за 700₽\n\n"
