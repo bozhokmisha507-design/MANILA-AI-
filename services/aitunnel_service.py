@@ -45,7 +45,6 @@ class AITunnelService:
         prompt = base_prompt.replace("{token}", subject)
         logger.info(f"Сформирован промпт: {prompt[:200]}...")
 
-        # Найдём существующее фото
         ref_photo = next((p for p in user_photo_paths if os.path.exists(p)), None)
         if not ref_photo:
             logger.error("Нет доступных фото пользователя. Проверенные пути: %s", user_photo_paths)
@@ -55,8 +54,6 @@ class AITunnelService:
         try:
             with open(ref_photo, "rb") as f:
                 image_b64 = base64.b64encode(f.read()).decode("utf-8")
-                # Пробуем оба формата – сначала без префикса (чистый base64)
-                image_data_url = f"data:image/png;base64,{image_b64}"
                 logger.info(f"Base64 длина: {len(image_b64)} символов")
         except Exception as e:
             logger.error(f"Ошибка кодирования фото: {e}", exc_info=True)
@@ -76,16 +73,15 @@ class AITunnelService:
             if self.model_key == "flash":
                 logger.info("Режим FLASH: делаем отдельные запросы с n=1")
                 for i in range(TOTAL_NEEDED):
-                    # Для flash используем чистый base64 (без префикса) – один из вариантов
                     payload = {
                         "model": self.model_name,
                         "prompt": prompt,
                         "n": 1,
                         "size": self.size,
                         "response_format": "b64_json",
-                        "image": image_b64   # пробуем без префикса
+                        "image": image_b64   # чистый base64
                     }
-                    logger.info(f"Flash запрос {i+1}/{TOTAL_NEEDED}: payload = { {k: v if k != 'image' else v[:50]+'...' for k,v in payload.items()} }")
+                    logger.info(f"Flash запрос {i+1}/{TOTAL_NEEDED}: payload (image обрезан) = { {k: v if k != 'image' else v[:50]+'...' for k,v in payload.items()} }")
                     success = False
                     for attempt in range(3):
                         try:
@@ -96,17 +92,28 @@ class AITunnelService:
                                 logger.info(f"Тело ответа (первые 500 символов): {resp_text[:500]}")
                                 if resp.status == 200:
                                     data = await resp.json()
-                                    if data.get('data') and len(data['data']) > 0:
-                                        b64 = data['data'][0].get('b64_json')
-                                        if b64 and len(b64) > 100:
-                                            images.append(b64)
-                                            success = True
-                                            logger.info(f"Flash: фото {i+1} успешно получено (длина b64={len(b64)})")
+                                    if 'data' in data and isinstance(data['data'], list):
+                                        for item in data['data']:
+                                            b64 = item.get('b64_json')
+                                            if b64 and isinstance(b64, str) and len(b64) > 100:
+                                                images.append(b64)
+                                                success = True
+                                                logger.info(f"Flash: фото {i+1} получено через b64_json")
+                                                break
+                                            url_data = item.get('url')
+                                            if url_data and url_data.startswith('data:image/'):
+                                                parts = url_data.split(',', 1)
+                                                if len(parts) == 2:
+                                                    b64 = parts[1]
+                                                    images.append(b64)
+                                                    success = True
+                                                    logger.info(f"Flash: фото {i+1} получено из url (data URL)")
+                                                    break
+                                            logger.warning(f"Не удалось извлечь изображение из item: {item.keys() if item else None}")
+                                        if success:
                                             break
-                                        else:
-                                            logger.warning(f"b64_json пустой или короткий: {b64[:50] if b64 else None}")
                                     else:
-                                        logger.warning(f"Нет 'data' в ответе: {data}")
+                                        logger.warning(f"Нет 'data' или data не список: {data}")
                                 else:
                                     logger.error(f"Ошибка HTTP {resp.status}: {resp_text}")
                         except asyncio.TimeoutError:
@@ -120,7 +127,7 @@ class AITunnelService:
                         logger.warning(f"Flash: не удалось получить фото {i+1} после 3 попыток")
                     await asyncio.sleep(0.5)
 
-            else:   # medium или high (GPT Image 2)
+            else:   # medium / high (GPT Image 2)
                 logger.info("Режим GPT: делаем один запрос с n=TOTAL_NEEDED")
                 payload = {
                     "model": self.model_name,
@@ -128,7 +135,7 @@ class AITunnelService:
                     "n": TOTAL_NEEDED,
                     "size": self.size,
                     "response_format": "b64_json",
-                    "image": image_b64   # пробуем без префикса
+                    "image": image_b64
                 }
                 if self.model_key in ("medium", "high") and self.quality:
                     payload["quality"] = self.quality
@@ -144,14 +151,25 @@ class AITunnelService:
                             logger.info(f"Тело ответа (первые 500 символов): {resp_text[:500]}")
                             if resp.status == 200:
                                 data = await resp.json()
-                                if 'data' in data:
+                                if 'data' in data and isinstance(data['data'], list):
                                     for idx, item in enumerate(data['data']):
                                         b64 = item.get('b64_json')
-                                        if b64:
+                                        if b64 and isinstance(b64, str) and len(b64) > 100:
                                             images.append(b64)
-                                            logger.info(f"GPT: фото {idx+1} добавлено (длина b64={len(b64)})")
-                                    logger.info(f"GPT: итого получено {len(images)} фото")
-                                    return images
+                                            logger.info(f"GPT: фото {idx+1} добавлено через b64_json")
+                                            continue
+                                        url_data = item.get('url')
+                                        if url_data and url_data.startswith('data:image/'):
+                                            parts = url_data.split(',', 1)
+                                            if len(parts) == 2:
+                                                b64 = parts[1]
+                                                images.append(b64)
+                                                logger.info(f"GPT: фото {idx+1} добавлено из url (data URL)")
+                                                continue
+                                        logger.warning(f"GPT: не удалось извлечь фото {idx+1} из item")
+                                    if images:
+                                        logger.info(f"GPT: итого получено {len(images)} фото")
+                                        return images
                                 else:
                                     logger.warning(f"Нет 'data' в ответе: {data}")
                             else:
