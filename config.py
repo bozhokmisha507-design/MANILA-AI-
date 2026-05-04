@@ -21,7 +21,15 @@ class Config:
             "name": "✨ Gemini 3.1 Flash (базовая, быстро)",
             "price_rub": 140,
             "price_tokens": 4,
-            "api_model": "gemini-3.1-flash-lite-preview",   # исправлено для чат-эндпоинта
+            "api_model": "gemini-3.1-flash-image-preview",
+            "quality": "standard",
+            "size": "1024x1024"
+        },
+        "pro": {
+            "name": "✨ Gemini 3 Pro (реалистичные лица, высокое качество)",
+            "price_rub": 144,
+            "price_tokens": 8,
+            "api_model": "gemini-3-pro-image-preview",
             "quality": "standard",
             "size": "1024x1024"
         },
@@ -40,14 +48,6 @@ class Config:
             "api_model": "gpt-image-2",
             "quality": "high",
             "size": "1536x1024"
-        },
-        "pro": {
-            "name": "✨ Gemini 3 Pro (реалистичные лица, высокое качество)",
-            "price_rub": 144,
-            "price_tokens": 8,
-            "api_model": "gemini-3-pro-image-preview",   # если не заработает, попробуйте gemini-3-pro-preview
-            "quality": "standard",
-            "size": "1024x1024"
         }
     }
 
