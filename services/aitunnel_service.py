@@ -11,7 +11,7 @@ class AITunnelService:
     TIMEOUT_FLASH = 150
     TIMEOUT_MEDIUM = 120
     TIMEOUT_HIGH = 180
-    TIMEOUT_PRO = 150   # аналогично flash
+    TIMEOUT_PRO = 150
 
     def __init__(self, model_key: str = "flash"):
         self.api_key = Config.AITUNNEL_API_KEY
@@ -21,7 +21,6 @@ class AITunnelService:
         self.model_name = info["api_model"]
         self.quality = info.get("quality", "standard")
         self.size = info.get("size", "1024x1024")
-        # таймауты для разных моделей
         if model_key == "flash":
             self.timeout = self.TIMEOUT_FLASH
         elif model_key == "pro":
@@ -77,8 +76,8 @@ class AITunnelService:
         TOTAL_NEEDED = 2   # ВРЕМЕННО: 2 фото для теста. После отладки заменить на 8
 
         async with aiohttp.ClientSession() as session:
-            # Модели, которые НЕ поддерживают n>1 (делаем отдельные запросы)
             if self.model_key in ("flash", "pro"):
+                # Модели, которые не поддерживают n>1
                 logger.info(f"Режим SINGLE: делаем {TOTAL_NEEDED} отдельных запросов с n=1")
                 for i in range(TOTAL_NEEDED):
                     payload = {
@@ -87,12 +86,8 @@ class AITunnelService:
                         "n": 1,
                         "size": self.size,
                         "response_format": "b64_json",
-                        "image": image_b64   # чистый base64 (без префикса)
+                        "image": image_b64
                     }
-                    # quality добавляем только для GPT, для flash/pro не нужно
-                    # if self.model_key in ("medium", "high"):
-                    #     payload["quality"] = self.quality
-
                     logger.info(f"Запрос {i+1}/{TOTAL_NEEDED}: payload (image обрезан) = { {k: v if k != 'image' else v[:50]+'...' for k,v in payload.items()} }")
                     success = False
                     for attempt in range(3):
@@ -139,20 +134,20 @@ class AITunnelService:
                         logger.warning(f"Не удалось получить фото {i+1} после 3 попыток")
                     await asyncio.sleep(0.5)
 
-            else:   # medium / high (GPT Image 2) – поддерживают n>1
+            else:   # medium / high (GPT Image 2)
                 logger.info("Режим GPT: делаем один запрос с n=TOTAL_NEEDED")
                 payload = {
                     "model": self.model_name,
                     "prompt": prompt,
                     "n": TOTAL_NEEDED,
                     "size": self.size,
-                    "response_format": "b64_json",
+                    # "response_format": "b64_json",   # УБРАНО — не поддерживается для gpt-image-2
                     "image": image_b64
                 }
                 if self.model_key in ("medium", "high") and self.quality:
-                    payload["quality"] = self.quality
-                    logger.info(f"Добавлен параметр quality={self.quality}")
-
+                    # quality тоже может быть проблемой, пока закомментируем
+                    # payload["quality"] = self.quality
+                    logger.info(f"Был бы добавлен параметр quality={self.quality}, но пока закомментирован")
                 logger.info(f"GPT payload (без image): { {k:v for k,v in payload.items() if k != 'image'} }")
                 for attempt in range(3):
                     try:
@@ -165,6 +160,7 @@ class AITunnelService:
                                 data = await resp.json()
                                 if 'data' in data and isinstance(data['data'], list):
                                     for idx, item in enumerate(data['data']):
+                                        # Пробуем получить b64_json, если нет — из url
                                         b64 = item.get('b64_json')
                                         if b64 and isinstance(b64, str) and len(b64) > 100:
                                             images.append(b64)
