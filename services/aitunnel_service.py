@@ -3,15 +3,16 @@ import base64
 import logging
 import aiohttp
 import asyncio
+import random
 from config import Config
 
 logger = logging.getLogger(__name__)
 
 class AITunnelService:
     TIMEOUT_FLASH = 150
-    TIMEOUT_MEDIUM = 120
-    TIMEOUT_HIGH = 180
     TIMEOUT_PRO = 150
+    TIMEOUT_MEDIUM = 120
+    TIMEOUT_HIGH = 120
 
     def __init__(self, model_key: str = "flash"):
         self.api_key = Config.AITUNNEL_API_KEY
@@ -20,17 +21,10 @@ class AITunnelService:
         info = Config.PACKAGE_MODELS.get(model_key, Config.PACKAGE_MODELS["flash"])
         self.model_name = info["api_model"]
         self.size = info.get("size", "1024x1024")
-        # Таймаут
-        if model_key == "flash":
-            self.timeout = self.TIMEOUT_FLASH
-        elif model_key == "pro":
-            self.timeout = self.TIMEOUT_PRO
-        elif model_key == "medium":
-            self.timeout = self.TIMEOUT_MEDIUM
-        elif model_key == "high":
-            self.timeout = self.TIMEOUT_HIGH
+        if model_key in ("flash", "pro"):
+            self.timeout = self.TIMEOUT_FLASH if model_key == "flash" else self.TIMEOUT_PRO
         else:
-            self.timeout = self.TIMEOUT_FLASH
+            self.timeout = self.TIMEOUT_MEDIUM
         logger.info(f"AITunnelService init: model_key={model_key}, model={self.model_name}")
 
     async def generate_package_photos(self, user_photo_paths: list, style_key: str, gender: str = None) -> list:
@@ -43,8 +37,11 @@ class AITunnelService:
         base_prompt = style["prompt"]
         subject = "this man" if gender == 'male' else "this woman" if gender == 'female' else "this person"
         prompt = base_prompt.replace("{token}", subject)
-        logger.info(f"Промпт: {prompt[:150]}...")
+        # Добавляем ориентацию для горизонтального формата (как в PIXEL)
+        if self.model_key in ("flash", "pro"):
+            prompt += " Landscape orientation, horizontal composition, aspect ratio 16:9, wide format."
 
+        # Берём первое существующее фото
         ref_photo = next((p for p in user_photo_paths if os.path.exists(p)), None)
         if not ref_photo:
             logger.error("Нет доступных фото пользователя")
@@ -54,66 +51,87 @@ class AITunnelService:
         try:
             with open(ref_photo, "rb") as f:
                 image_b64 = base64.b64encode(f.read()).decode("utf-8")
-                logger.info(f"Base64 длина: {len(image_b64)}")
+                data_url = f"data:image/jpeg;base64,{image_b64}"
         except Exception as e:
-            logger.error(f"Ошибка чтения фото: {e}")
+            logger.error(f"Ошибка кодирования фото: {e}")
             return []
 
         images = []
-        TOTAL_NEEDED = 2   # временно 2 фото
+        TOTAL_NEEDED = 2   # для теста 2 фото, потом замените на 8
 
         async with aiohttp.ClientSession() as session:
-            url = f"{self.base_url}/images/generations"
-            headers = {
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json"
-            }
-            for i in range(TOTAL_NEEDED):
-                payload = {
-                    "model": self.model_name,
-                    "prompt": prompt,
-                    "n": 1,
-                    "size": self.size,
-                    "image": image_b64,      # чистый base64
-                    "strength": 0.8          # ключевой параметр для сохранения лица
+            if self.model_key in ("flash", "pro"):
+                # Метод PIXEL: чат-эндпоинт
+                url = f"{self.base_url}/chat/completions"
+                headers = {
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json"
                 }
-                # Для GPT модели качество можно добавить, но пока не будем
-                logger.info(f"Запрос {i+1}/{TOTAL_NEEDED} (generations, модель {self.model_name})")
-                success = False
-                for attempt in range(3):
-                    try:
-                        async with session.post(url, headers=headers, json=payload, timeout=self.timeout) as resp:
-                            if resp.status == 200:
-                                data = await resp.json()
-                                # Извлекаем изображение
-                                b64 = None
-                                if 'data' in data and len(data['data']):
-                                    item = data['data'][0]
-                                    if 'b64_json' in item:
-                                        b64 = item['b64_json']
-                                    elif 'url' in item:
-                                        url_data = item['url']
-                                        if url_data.startswith('data:image/'):
-                                            b64 = url_data.split(',', 1)[1]
+                for i in range(TOTAL_NEEDED):
+                    payload = {
+                        "model": self.model_name,
+                        "messages": [
+                            {
+                                "role": "user",
+                                "content": [
+                                    {"type": "image_url", "image_url": {"url": data_url}},
+                                    {"type": "text", "text": f"Сгенерируй фото на основе этого человека: {prompt}"}
+                                ]
+                            }
+                        ],
+                        "modalities": ["image", "text"],
+                        "max_tokens": 1000,
+                        "seed": random.randint(1, 1000000),
+                        "candidate_count": 1
+                    }
+                    logger.info(f"Запрос {i+1}/{TOTAL_NEEDED} (chat)")
+                    success = False
+                    for attempt in range(3):
+                        try:
+                            async with session.post(url, headers=headers, json=payload, timeout=self.timeout) as resp:
+                                if resp.status == 200:
+                                    data = await resp.json()
+                                    if 'choices' in data and data['choices']:
+                                        message = data['choices'][0].get('message', {})
+                                        # Извлекаем изображение из message['images'] (основной путь)
+                                        if 'images' in message and message['images']:
+                                            for img in message['images']:
+                                                if 'image_url' in img and 'url' in img['image_url']:
+                                                    img_url = img['image_url']['url']
+                                                    if img_url.startswith('data:image/'):
+                                                        b64 = img_url.split(',', 1)[1]
+                                                        images.append(b64)
+                                                        success = True
+                                                        logger.info(f"Фото {i+1} получено из images")
+                                                        break
+                                            if success:
+                                                break
+                                        # Запасной вариант: content содержит data URL
+                                        elif 'content' in message and message['content'].startswith('data:image'):
+                                            b64 = message['content'].split(',', 1)[1]
+                                            images.append(b64)
+                                            success = True
+                                            logger.info(f"Фото {i+1} получено из content")
+                                            break
                                         else:
-                                            # Если url обычный, можно попробовать скачать, но для простоты пропускаем
-                                            logger.warning(f"Получен обычный URL: {url_data[:50]}")
-                                if b64:
-                                    images.append(b64)
-                                    success = True
-                                    logger.info(f"Фото {i+1} получено")
-                                    break
+                                            logger.warning("Нет изображения в ответе")
+                                    else:
+                                        logger.warning("Нет choices в ответе")
                                 else:
-                                    logger.warning(f"Нет b64 в ответе: {data}")
-                            else:
-                                text = await resp.text()
-                                logger.error(f"Ошибка {resp.status}: {text[:200]}")
-                    except Exception as e:
-                        logger.error(f"Попытка {attempt+1} не удалась: {e}")
-                    await asyncio.sleep(1.5 * (2 ** attempt))
-                if not success:
-                    logger.warning(f"Не удалось получить фото {i+1}")
-                await asyncio.sleep(0.5)
+                                    text = await resp.text()
+                                    logger.error(f"Ошибка {resp.status}: {text[:200]}")
+                        except Exception as e:
+                            logger.error(f"Попытка {attempt+1} не удалась: {e}")
+                        await asyncio.sleep(1.5 * (2 ** attempt))
+                    if not success:
+                        logger.warning(f"Не удалось получить фото {i+1}")
+                    await asyncio.sleep(0.5)
 
-        logger.info(f"Итого сгенерировано {len(images)} фото")
+            else:
+                # Для GPT Image 2 (medium/high) – пока не реализовано, можно закомментировать
+                logger.warning(f"Модель {self.model_key} временно отключена. Используйте flash или pro.")
+                # Временно возвращаем пустой список
+                return []
+
+        logger.info(f"Сгенерировано {len(images)} фото")
         return images
