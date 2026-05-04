@@ -11,6 +11,7 @@ class AITunnelService:
     TIMEOUT_FLASH = 150
     TIMEOUT_MEDIUM = 120
     TIMEOUT_HIGH = 180
+    TIMEOUT_PRO = 150   # аналогично flash
 
     def __init__(self, model_key: str = "flash"):
         self.api_key = Config.AITUNNEL_API_KEY
@@ -20,11 +21,17 @@ class AITunnelService:
         self.model_name = info["api_model"]
         self.quality = info.get("quality", "standard")
         self.size = info.get("size", "1024x1024")
-        self.timeout = {
-            "flash": self.TIMEOUT_FLASH,
-            "medium": self.TIMEOUT_MEDIUM,
-            "high": self.TIMEOUT_HIGH
-        }.get(model_key, self.TIMEOUT_FLASH)
+        # таймауты для разных моделей
+        if model_key == "flash":
+            self.timeout = self.TIMEOUT_FLASH
+        elif model_key == "pro":
+            self.timeout = self.TIMEOUT_PRO
+        elif model_key == "medium":
+            self.timeout = self.TIMEOUT_MEDIUM
+        elif model_key == "high":
+            self.timeout = self.TIMEOUT_HIGH
+        else:
+            self.timeout = self.TIMEOUT_FLASH
         logger.info(f"AITunnelService инициализирован: model_key={model_key}, model={self.model_name}, size={self.size}, quality={self.quality}")
 
     async def generate_package_photos(self, user_photo_paths: list, style_key: str, gender: str = None) -> list:
@@ -70,8 +77,9 @@ class AITunnelService:
         TOTAL_NEEDED = 2   # ВРЕМЕННО: 2 фото для теста. После отладки заменить на 8
 
         async with aiohttp.ClientSession() as session:
-            if self.model_key == "flash":
-                logger.info("Режим FLASH: делаем отдельные запросы с n=1")
+            # Модели, которые НЕ поддерживают n>1 (делаем отдельные запросы)
+            if self.model_key in ("flash", "pro"):
+                logger.info(f"Режим SINGLE: делаем {TOTAL_NEEDED} отдельных запросов с n=1")
                 for i in range(TOTAL_NEEDED):
                     payload = {
                         "model": self.model_name,
@@ -79,9 +87,13 @@ class AITunnelService:
                         "n": 1,
                         "size": self.size,
                         "response_format": "b64_json",
-                        "image": image_b64   # чистый base64
+                        "image": image_b64   # чистый base64 (без префикса)
                     }
-                    logger.info(f"Flash запрос {i+1}/{TOTAL_NEEDED}: payload (image обрезан) = { {k: v if k != 'image' else v[:50]+'...' for k,v in payload.items()} }")
+                    # quality добавляем только для GPT, для flash/pro не нужно
+                    # if self.model_key in ("medium", "high"):
+                    #     payload["quality"] = self.quality
+
+                    logger.info(f"Запрос {i+1}/{TOTAL_NEEDED}: payload (image обрезан) = { {k: v if k != 'image' else v[:50]+'...' for k,v in payload.items()} }")
                     success = False
                     for attempt in range(3):
                         try:
@@ -98,7 +110,7 @@ class AITunnelService:
                                             if b64 and isinstance(b64, str) and len(b64) > 100:
                                                 images.append(b64)
                                                 success = True
-                                                logger.info(f"Flash: фото {i+1} получено через b64_json")
+                                                logger.info(f"Фото {i+1} получено через b64_json")
                                                 break
                                             url_data = item.get('url')
                                             if url_data and url_data.startswith('data:image/'):
@@ -107,7 +119,7 @@ class AITunnelService:
                                                     b64 = parts[1]
                                                     images.append(b64)
                                                     success = True
-                                                    logger.info(f"Flash: фото {i+1} получено из url (data URL)")
+                                                    logger.info(f"Фото {i+1} получено из url (data URL)")
                                                     break
                                             logger.warning(f"Не удалось извлечь изображение из item: {item.keys() if item else None}")
                                         if success:
@@ -124,10 +136,10 @@ class AITunnelService:
                             logger.error(f"Неожиданное исключение: {e}", exc_info=True)
                         await asyncio.sleep(1.5 * (2 ** attempt))
                     if not success:
-                        logger.warning(f"Flash: не удалось получить фото {i+1} после 3 попыток")
+                        logger.warning(f"Не удалось получить фото {i+1} после 3 попыток")
                     await asyncio.sleep(0.5)
 
-            else:   # medium / high (GPT Image 2)
+            else:   # medium / high (GPT Image 2) – поддерживают n>1
                 logger.info("Режим GPT: делаем один запрос с n=TOTAL_NEEDED")
                 payload = {
                     "model": self.model_name,
