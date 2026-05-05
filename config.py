@@ -22,23 +22,23 @@ class Config:
             "price_rub": 140,
             "price_tokens": 4,
             "api_model": "gemini-3.1-flash-image-preview",
-            "quality": "standard",
+            "quality": "standard",   # для flash может понадобиться, оставим
             "size": "1024x1024"
         },
         "medium": {
             "name": "🎨 GPT Image 2 Medium (отличное качество)",
             "price_rub": 245,
             "price_tokens": 7,
-            "api_model": "dall-e-2",          # изменено
-            "quality": "medium",              # возможно, потребуется убрать
+            "api_model": "dall-e-2",
+            # "quality": "medium",   # удалено – не поддерживается
             "size": "1536x1024"
         },
         "high": {
             "name": "💎 GPT Image 2 High (максимальное качество)",
             "price_rub": 525,
             "price_tokens": 15,
-            "api_model": "dall-e-2",          # изменено
-            "quality": "high",                # возможно, потребуется убрать
+            "api_model": "dall-e-2",
+            # "quality": "high",      # удалено – не поддерживается
             "size": "1536x1024"
         }
     }

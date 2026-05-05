@@ -18,7 +18,7 @@ class AITunnelService:
         self.model_key = model_key
         info = Config.PACKAGE_MODELS.get(model_key, Config.PACKAGE_MODELS["flash"])
         self.model_name = info["api_model"]
-        self.quality = info.get("quality", "standard")
+        # quality не используем, т.к. для dall-e-2 он не поддерживается, а для gemini-3.1-flash тоже не нужен
         self.size = info.get("size", "1024x1024")
         self.timeout = {
             "flash": self.TIMEOUT_FLASH,
@@ -68,12 +68,7 @@ class AITunnelService:
             "response_format": "b64_json",
             "image": image_b64
         }
-        # Параметр quality добавляется только для моделей, которые его поддерживают.
-        # Для dall-e-2 качество не нужно (оно определяется размером и количеством шагов),
-        # но оставим для совместимости с GPT Image 2 – если API его не принимает,
-        # он просто проигнорирует.
-        if self.model_key in ("medium", "high"):
-            payload["quality"] = self.quality
+        # Параметр quality не добавляем – для dall-e-2 он вызывает ошибку, для gemini не нужен
 
         timeout = aiohttp.ClientTimeout(total=self.timeout)
         images = []
