@@ -1,6 +1,7 @@
 import uuid
 import logging
 import asyncio
+import os
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Bot
 from telegram.ext import ContextTypes, CommandHandler, CallbackQueryHandler
 from config import Config
@@ -134,7 +135,6 @@ async def pay_with_tokens_callback(update: Update, context: ContextTypes.DEFAULT
         return
 
     await query.edit_message_text("⏳ Генерация фотосессии... Это может занять до 2 минут. Жди! 🎬")
-    # Запускаем генерацию (функция generate_package определена ниже)
     await generate_package(user_id, context.bot, db, context, style_key, model_key)
 
 # ------------------------------------------------------------
@@ -207,8 +207,12 @@ async def generate_package(user_id: int, bot: Bot, db, context, style_key: str, 
             return
 
         photo_paths = await db.get_user_photos(user_id, "input")
+        # Фильтруем только существующие файлы
+        photo_paths = [p for p in photo_paths if os.path.exists(p)]
         if not photo_paths:
-            await bot.send_message(user_id, "❌ Не найдены ваши фото. Загрузите их.")
+            await bot.send_message(user_id, "❌ Ваши фото не найдены. Пожалуйста, загрузите их заново через «📤 Загрузить фото».")
+            token_cost = Config.PACKAGE_MODELS.get(model_key, {}).get('price_tokens', 4)
+            await db.add_tokens(user_id, token_cost)
             return
 
         gender = await db.get_user_gender(user_id)
@@ -222,13 +226,11 @@ async def generate_package(user_id: int, bot: Bot, db, context, style_key: str, 
                 await asyncio.sleep(0.3)
         else:
             await bot.send_message(user_id, "❌ Не удалось сгенерировать фотосессию. Попробуй позже.")
-            # Возвращаем жетоны (они уже списаны)
             token_cost = Config.PACKAGE_MODELS.get(model_key, {}).get('price_tokens', 4)
             await db.add_tokens(user_id, token_cost)
             await bot.send_message(user_id, f"💎 Жетоны в количестве {token_cost} возвращены.")
             return
 
-        # Очистка временных данных
         context.user_data.pop('selected_style', None)
         context.user_data.pop('selected_model', None)
         await bot.send_message(user_id, text="👇 *Главное меню*:", parse_mode='Markdown', reply_markup=get_main_menu_keyboard())
@@ -257,8 +259,9 @@ async def generate_package_from_data(user_id: int, bot: Bot, db, data: dict):
             return
 
         photo_paths = await db.get_user_photos(user_id, "input")
+        photo_paths = [p for p in photo_paths if os.path.exists(p)]
         if not photo_paths:
-            await bot.send_message(user_id, "❌ Не найдены ваши фото. Загрузите их через главное меню.")
+            await bot.send_message(user_id, "❌ Ваши фото не найдены. Загрузите их заново через главное меню.")
             return
 
         gender = await db.get_user_gender(user_id)

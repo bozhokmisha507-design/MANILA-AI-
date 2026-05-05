@@ -9,7 +9,7 @@ class Config:
     
     # AI Tunnel
     AITUNNEL_API_KEY = os.getenv("AITUNNEL_API_KEY", "")
-    AITUNNEL_IMAGE_MODEL = os.getenv("AITUNNEL_IMAGE_MODEL", "gemini-3.1-flash-image-preview")
+    AITUNNEL_IMAGE_MODEL = os.getenv("AITUNNEL_IMAGE_MODEL", "gemini-3.1-flash-lite-preview")
 
     # ==================== ЮKassa ====================
     YKASSA_SHOP_ID = int(os.getenv("YKASSA_SHOP_ID", 0))
@@ -21,7 +21,7 @@ class Config:
             "name": "✨ Gemini 3.1 Flash (базовая, быстро)",
             "price_rub": 140,
             "price_tokens": 4,
-            "api_model": "gemini-3.1-flash-image-preview",
+            "api_model": "gemini-3.1-flash-lite-preview",   # исправлено
             "quality": "standard",
             "size": "1024x1024"
         },

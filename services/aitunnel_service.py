@@ -9,7 +9,7 @@ from config import Config
 logger = logging.getLogger(__name__)
 
 class AITunnelService:
-    TIMEOUT_GEMINI = 90  # для каждого запроса
+    TIMEOUT_GEMINI = 90
 
     def __init__(self, model_key: str = "flash"):
         self.api_key = Config.AITUNNEL_API_KEY
@@ -18,12 +18,11 @@ class AITunnelService:
         info = Config.PACKAGE_MODELS.get(model_key, Config.PACKAGE_MODELS["flash"])
         self.model_name = info["api_model"]
         self.size = info.get("size", "1024x1024")
-        # Таймаут (можно общий)
         self.timeout = self.TIMEOUT_GEMINI
         logger.info(f"AITunnelService init: model_key={model_key}, model={self.model_name}")
 
     async def _post_chat_completion(self, session, data_url: str, prompt: str) -> str | None:
-        """Один запрос к /chat/completions, возвращает чистый base64 изображения или None."""
+        """Один запрос к /chat/completions, возвращает чистый base64 изображения."""
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json"
@@ -57,13 +56,13 @@ class AITunnelService:
                         data = await resp.json()
                         if 'choices' in data and data['choices']:
                             message = data['choices'][0].get('message', {})
-                            # Способ из PIXEL: ищем images
+                            # Способ из PIXEL: images -> image_url -> url
                             if 'images' in message and message['images']:
                                 img_url = message['images'][0].get('image_url', {}).get('url')
                                 if img_url and img_url.startswith('data:image/'):
                                     return img_url.split(',', 1)[1]
-                            # Запасной вариант: content с data URL
-                            if 'content' in message and message['content'].startswith('data:image'):
+                            # Запасной вариант: content содержит data URL
+                            if 'content' in message and isinstance(message['content'], str) and message['content'].startswith('data:image'):
                                 return message['content'].split(',', 1)[1]
                         logger.warning("Нет изображения в ответе")
                     else:
@@ -75,7 +74,7 @@ class AITunnelService:
         return None
 
     async def generate_package_photos(self, user_photo_paths: list, style_key: str, gender: str = None) -> list:
-        """Генерация пакета из TOTAL_NEEDED фото (по умолчанию 8, можно изменить в коде)."""
+        """Генерация пакета из 8 фото (или другого количества)."""
         logger.info(f"Генерация пакета: model={self.model_key}, style={style_key}")
 
         style = Config.STYLES.get(style_key)
@@ -85,7 +84,7 @@ class AITunnelService:
         base_prompt = style["prompt"]
         subject = "this man" if gender == 'male' else "this woman" if gender == 'female' else "this person"
         prompt = base_prompt.replace("{token}", subject)
-        # Добавляем указание на горизонтальный формат (как в PIXEL для Gemini)
+        # Добавляем горизонтальный формат (как в PIXEL)
         prompt += " Landscape orientation, horizontal composition, aspect ratio 16:9, wide format."
 
         # Берём первое существующее референсное фото
@@ -103,8 +102,8 @@ class AITunnelService:
             logger.error(f"Ошибка кодирования фото: {e}")
             return []
 
+        TOTAL_NEEDED = 1   # количество фото в пакете (можно временно 2 для теста)
         images = []
-        TOTAL_NEEDED = 8   # изменяйте на 2 для теста, потом верните 8
 
         async with aiohttp.ClientSession() as session:
             for i in range(TOTAL_NEEDED):
@@ -115,7 +114,7 @@ class AITunnelService:
                     logger.info(f"Фото {i+1} получено")
                 else:
                     logger.warning(f"Фото {i+1} не получено")
-                await asyncio.sleep(0.5)  # небольшая пауза между запросами
+                await asyncio.sleep(0.5)   # пауза между запросами
 
         logger.info(f"Сгенерировано {len(images)} фото")
         return images
