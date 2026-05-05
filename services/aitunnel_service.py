@@ -63,7 +63,7 @@ class AITunnelService:
         payload = {
             "model": self.model_name,
             "prompt": prompt,
-            "n": 8,
+            "n": 1,
             "size": self.size,
             "response_format": "b64_json",
             "image": image_b64
