@@ -8,83 +8,98 @@ from config import Config
 logger = logging.getLogger(__name__)
 
 class AITunnelService:
-    TIMEOUT = 120
+    TIMEOUT_FLASH = 90
+    TIMEOUT_MEDIUM = 120
+    TIMEOUT_HIGH = 180
 
-    def __init__(self, model_key: str = "gpt"):
-        info = Config.PACKAGE_MODELS.get(model_key, Config.PACKAGE_MODELS["gpt"])
+    def __init__(self, model_key: str = "flash"):
         self.api_key = Config.AITUNNEL_API_KEY
         self.base_url = "https://api.aitunnel.ru/v1"
+        self.model_key = model_key
+        info = Config.PACKAGE_MODELS.get(model_key, Config.PACKAGE_MODELS["flash"])
         self.model_name = info["api_model"]
+        self.quality = info.get("quality", "standard")
         self.size = info.get("size", "1024x1024")
-        logger.info(f"AITunnelService (GPT edits) init: model={self.model_name}")
+        self.timeout = {
+            "flash": self.TIMEOUT_FLASH,
+            "medium": self.TIMEOUT_MEDIUM,
+            "high": self.TIMEOUT_HIGH
+        }.get(model_key, self.TIMEOUT_FLASH)
 
     async def generate_package_photos(self, user_photo_paths: list, style_key: str, gender: str = None) -> list:
-        logger.info(f"Генерация пакета: style={style_key}")
-
         style = Config.STYLES.get(style_key)
         if not style:
             raise ValueError(f"Неизвестный стиль: {style_key}")
 
         base_prompt = style["prompt"]
-        subject = "this man" if gender == 'male' else "this woman" if gender == 'female' else "this person"
+        if gender == 'male':
+            subject = "this man"
+        elif gender == 'female':
+            subject = "this woman"
+        else:
+            subject = "this person"
         prompt = base_prompt.replace("{token}", subject)
-        prompt += " Landscape orientation, horizontal composition, aspect ratio 16:9, wide format. Do not change the person's identity."
+        prompt += " Landscape orientation, horizontal composition, aspect ratio 16:9, wide format."
 
+        # Найдём существующее фото
         ref_photo = next((p for p in user_photo_paths if os.path.exists(p)), None)
         if not ref_photo:
             logger.error("Нет доступных фото пользователя")
             return []
 
-        with open(ref_photo, "rb") as f:
-            image_bytes = f.read()
-        logger.info(f"Референс фото загружено, размер {len(image_bytes)} байт")
+        try:
+            with open(ref_photo, "rb") as f:
+                image_b64 = base64.b64encode(f.read()).decode("utf-8")
+        except Exception as e:
+            logger.error(f"Ошибка кодирования фото: {e}")
+            return []
 
-        TOTAL_NEEDED = 1   # тест: 1 фото, потом 8
+        url = f"{self.base_url}/images/generations"
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
+        }
+
+        payload = {
+            "model": self.model_name,
+            "prompt": prompt,
+            "n": 8,
+            "size": self.size,
+            "response_format": "b64_json",
+            "image": image_b64
+        }
+        # Параметр quality добавляется только для моделей, которые его поддерживают.
+        # Для dall-e-2 качество не нужно (оно определяется размером и количеством шагов),
+        # но оставим для совместимости с GPT Image 2 – если API его не принимает,
+        # он просто проигнорирует.
+        if self.model_key in ("medium", "high"):
+            payload["quality"] = self.quality
+
+        timeout = aiohttp.ClientTimeout(total=self.timeout)
         images = []
-        url = f"{self.base_url}/images/edits"
-        headers = {"Authorization": f"Bearer {self.api_key}"}
 
         async with aiohttp.ClientSession() as session:
-            for i in range(TOTAL_NEEDED):
-                form_data = aiohttp.FormData()
-                form_data.add_field('model', self.model_name)
-                form_data.add_field('image', image_bytes, filename='photo.jpg', content_type='image/jpeg')
-                form_data.add_field('prompt', prompt)
-                form_data.add_field('n', '1')
-                form_data.add_field('size', self.size)
-                form_data.add_field('response_format', 'b64_json')
-
-                logger.info(f"Запрос {i+1}/{TOTAL_NEEDED} (edits)")
-                success = False
-                for attempt in range(3):
-                    try:
-                        async with session.post(url, headers=headers, data=form_data, timeout=self.TIMEOUT) as resp:
-                            if resp.status == 200:
-                                data = await resp.json()
-                                if 'data' in data and len(data['data']):
-                                    item = data['data'][0]
-                                    b64 = item.get('b64_json')
-                                    if b64:
-                                        images.append(b64)
-                                        success = True
-                                        logger.info(f"Фото {i+1} получено (b64)")
-                                        break
-                                    url_img = item.get('url')
-                                    if url_img and url_img.startswith('data:image/'):
-                                        b64 = url_img.split(',')[1]
-                                        images.append(b64)
-                                        success = True
-                                        logger.info(f"Фото {i+1} получено из url")
-                                        break
+            for attempt in range(3):
+                try:
+                    async with session.post(url, headers=headers, json=payload, timeout=timeout) as resp:
+                        if resp.status == 200:
+                            data = await resp.json()
+                            if 'data' in data:
+                                for item in data['data']:
+                                    if 'b64_json' in item:
+                                        images.append(item['b64_json'])
+                                    elif 'url' in item:
+                                        images.append(item['url'])
+                                logger.info(f"Сгенерировано {len(images)} фото для пакета")
+                                return images
                             else:
-                                text = await resp.text()
-                                logger.error(f"Ошибка {resp.status}: {text[:300]}")
-                    except Exception as e:
-                        logger.error(f"Попытка {attempt+1}: {e}")
-                    await asyncio.sleep(1.5 * (2 ** attempt))
-                if not success:
-                    logger.warning(f"Фото {i+1} не получено")
-                await asyncio.sleep(0.3)
-
-        logger.info(f"Сгенерировано {len(images)} фото")
-        return images
+                                logger.warning(f"Ответ не содержит 'data': {data}")
+                        else:
+                            error_text = await resp.text()
+                            logger.error(f"Попытка {attempt+1}: ошибка {resp.status} - {error_text[:200]}")
+                except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+                    logger.error(f"Попытка {attempt+1} не удалась: {e}")
+                    if attempt == 2:
+                        return []
+                await asyncio.sleep(1.5 * (2 ** attempt))
+        return []

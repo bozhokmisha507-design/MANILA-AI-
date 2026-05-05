@@ -9,7 +9,7 @@ class Config:
     
     # AI Tunnel
     AITUNNEL_API_KEY = os.getenv("AITUNNEL_API_KEY", "")
-    AITUNNEL_IMAGE_MODEL = os.getenv("AITUNNEL_IMAGE_MODEL", "gpt-image-2")
+    AITUNNEL_IMAGE_MODEL = os.getenv("AITUNNEL_IMAGE_MODEL", "gemini-3.1-flash-image-preview")
 
     # ==================== ЮKassa ====================
     YKASSA_SHOP_ID = int(os.getenv("YKASSA_SHOP_ID", 0))
@@ -17,27 +17,51 @@ class Config:
 
     # ==================== Пакетная фотосессия (8 фото) ====================
     PACKAGE_MODELS = {
-        "gpt": {
-            "name": "🎨 GPT Image 2 (отличное качество, 1 фото тест)",
-            "price_rub": 30,        # временная цена для теста
-            "price_tokens": 2,
-            "api_model": "gpt-image-2",
-            "quality": "medium",
+        "flash": {
+            "name": "✨ Gemini 3.1 Flash (базовая, быстро)",
+            "price_rub": 140,
+            "price_tokens": 4,
+            "api_model": "gemini-3.1-flash-image-preview",
+            "quality": "standard",
             "size": "1024x1024"
+        },
+        "medium": {
+            "name": "🎨 GPT Image 2 Medium (отличное качество)",
+            "price_rub": 245,
+            "price_tokens": 7,
+            "api_model": "dall-e-2",          # изменено
+            "quality": "medium",              # возможно, потребуется убрать
+            "size": "1536x1024"
+        },
+        "high": {
+            "name": "💎 GPT Image 2 High (максимальное качество)",
+            "price_rub": 525,
+            "price_tokens": 15,
+            "api_model": "dall-e-2",          # изменено
+            "quality": "high",                # возможно, потребуется убрать
+            "size": "1536x1024"
         }
     }
 
+    # Цена пакета жетонов (20 шт)
     PRICE_20_TOKENS = 700
+
+    # Telegram Payments (не используется)
     PAYMENT_PROVIDER_TOKEN = os.getenv("PAYMENT_PROVIDER_TOKEN", "")
+
+    # Папки
     SHARED_DIR = os.getenv("SHARED_DIR", "/app/shared")
     UPLOAD_DIR = os.path.join(SHARED_DIR, "uploads")
     OUTPUT_DIR = os.path.join(SHARED_DIR, "outputs")
+
     MIN_PHOTOS = 2
     MAX_PHOTOS = 5
     RECOMMENDED_PHOTOS = 4
-    ADMIN_IDS = [int(x) for x in os.getenv("ADMIN_IDS", "955206480,5063386675").split(",") if x.strip()]
 
-    # ==================== 6 СТИЛЕЙ (полные) ====================
+    # Список администраторов
+    ADMIN_IDS = [int(x) for x in os.getenv("ADMIN_IDS", "955206480").split(",") if x.strip()]
+
+    # ==================== СТИЛИ ДЛЯ ПАКЕТНОЙ ФОТОСЕССИИ ====================
     STYLES = {
         "luxury_interior": {
             "name": "🏠 Интерьерная съемка",
