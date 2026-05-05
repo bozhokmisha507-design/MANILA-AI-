@@ -31,13 +31,17 @@ class AITunnelService:
         prompt = base_prompt.replace("{token}", subject)
         prompt += " Landscape orientation, horizontal composition, aspect ratio 16:9, wide format. Do not change the person's identity."
 
-        # Берём первое существующее фото
         ref_photo = next((p for p in user_photo_paths if os.path.exists(p)), None)
         if not ref_photo:
             logger.error("Нет доступных фото пользователя")
             return []
 
-        TOTAL_NEEDED = 1   # ⬅️ ТЕСТ: 1 фото. После успеха замените на 8
+        # Читаем файл один раз
+        with open(ref_photo, 'rb') as f:
+            image_bytes = f.read()
+        logger.info(f"Референс фото загружено, размер {len(image_bytes)} байт")
+
+        TOTAL_NEEDED = 1   # тест 1 фото, потом 8
         images = []
         url = f"{self.base_url}/images/edits"
         headers = {"Authorization": f"Bearer {self.api_key}"}
@@ -46,14 +50,14 @@ class AITunnelService:
             for i in range(TOTAL_NEEDED):
                 form_data = aiohttp.FormData()
                 form_data.add_field('model', self.model_name)
-                with open(ref_photo, 'rb') as f:
-                    form_data.add_field('image', f, filename='photo.jpg', content_type='image/jpeg')
+                # Добавляем файл как байтовое поле, не открывая повторно
+                form_data.add_field('image', image_bytes, filename='photo.jpg', content_type='image/jpeg')
                 form_data.add_field('prompt', prompt)
                 form_data.add_field('n', '1')
                 form_data.add_field('size', self.size)
                 form_data.add_field('response_format', 'b64_json')
                 form_data.add_field('quality', self.quality)
-                form_data.add_field('strength', '0.85')  # сохранение лица
+                form_data.add_field('strength', '0.85')
 
                 logger.info(f"Запрос {i+1}/{TOTAL_NEEDED} (edits)")
                 success = False
@@ -85,7 +89,7 @@ class AITunnelService:
                     await asyncio.sleep(1.5 * (2 ** attempt))
                 if not success:
                     logger.warning(f"Фото {i+1} не получено")
-                await asyncio.sleep(0.3)  # пауза между запросами
+                await asyncio.sleep(0.3)
 
         logger.info(f"Сгенерировано {len(images)} фото")
         return images
