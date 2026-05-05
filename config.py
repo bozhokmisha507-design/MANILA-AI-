@@ -9,7 +9,7 @@ class Config:
     
     # AI Tunnel
     AITUNNEL_API_KEY = os.getenv("AITUNNEL_API_KEY", "")
-    AITUNNEL_IMAGE_MODEL = os.getenv("AITUNNEL_IMAGE_MODEL", "gemini-3.1-flash-lite-preview")
+    AITUNNEL_IMAGE_MODEL = os.getenv("AITUNNEL_IMAGE_MODEL", "gemini-3-pro-image-preview")
 
     # ==================== ЮKassa ====================
     YKASSA_SHOP_ID = int(os.getenv("YKASSA_SHOP_ID", 0))
@@ -17,37 +17,13 @@ class Config:
 
     # ==================== Пакетная фотосессия (8 фото) ====================
     PACKAGE_MODELS = {
-        "flash": {
-            "name": "✨ Gemini 3.1 Flash (базовая, быстро)",
-            "price_rub": 140,
-            "price_tokens": 4,
-            "api_model": "gemini-3.1-flash-lite-preview",   # исправлено
-            "quality": "standard",
-            "size": "1024x1024"
-        },
         "pro": {
-            "name": "✨ Gemini 3 Pro (реалистичные лица, высокое качество)",
+            "name": "✨ Nano Banana Pro (максимальное качество, точное лицо)",
             "price_rub": 144,
             "price_tokens": 8,
             "api_model": "gemini-3-pro-image-preview",
             "quality": "standard",
             "size": "1024x1024"
-        },
-        "medium": {
-            "name": "🎨 GPT Image 2 Medium (отличное качество)",
-            "price_rub": 245,
-            "price_tokens": 7,
-            "api_model": "gpt-image-2",
-            "quality": "medium",
-            "size": "1536x1024"
-        },
-        "high": {
-            "name": "💎 GPT Image 2 High (максимальное качество)",
-            "price_rub": 525,
-            "price_tokens": 15,
-            "api_model": "gpt-image-2",
-            "quality": "high",
-            "size": "1536x1024"
         }
     }
 
