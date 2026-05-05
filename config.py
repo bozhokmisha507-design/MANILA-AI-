@@ -4,52 +4,27 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class Config:
-    # Telegram Bot
     BOT_TOKEN = os.getenv("BOT_TOKEN", "")
-    
-    # AI Tunnel
     AITUNNEL_API_KEY = os.getenv("AITUNNEL_API_KEY", "")
     AITUNNEL_IMAGE_MODEL = os.getenv("AITUNNEL_IMAGE_MODEL", "gemini-3.1-flash-image-preview")
 
-    # ==================== ЮKassa ====================
     YKASSA_SHOP_ID = int(os.getenv("YKASSA_SHOP_ID", 0))
     YKASSA_SECRET_KEY = os.getenv("YKASSA_SECRET_KEY", "")
 
-    # ==================== Пакетная фотосессия (8 фото) ====================
+    # Единственная модель
     PACKAGE_MODELS = {
         "flash": {
-            "name": "✨ Gemini 3.1 Flash (базовая, быстро)",
+            "name": "✨ Gemini 3.1 Flash",
             "price_rub": 140,
             "price_tokens": 4,
             "api_model": "gemini-3.1-flash-image-preview",
-            "quality": "standard",   # для flash может понадобиться, оставим
             "size": "1024x1024"
-        },
-        "medium": {
-            "name": "🎨 GPT Image 2 Medium (отличное качество)",
-            "price_rub": 245,
-            "price_tokens": 7,
-            "api_model": "dall-e-2",
-            # "quality": "medium",   # удалено – не поддерживается
-            "size": "1536x1024"
-        },
-        "high": {
-            "name": "💎 GPT Image 2 High (максимальное качество)",
-            "price_rub": 525,
-            "price_tokens": 15,
-            "api_model": "dall-e-2",
-            # "quality": "high",      # удалено – не поддерживается
-            "size": "1536x1024"
         }
     }
 
-    # Цена пакета жетонов (20 шт)
     PRICE_20_TOKENS = 700
-
-    # Telegram Payments (не используется)
     PAYMENT_PROVIDER_TOKEN = os.getenv("PAYMENT_PROVIDER_TOKEN", "")
 
-    # Папки
     SHARED_DIR = os.getenv("SHARED_DIR", "/app/shared")
     UPLOAD_DIR = os.path.join(SHARED_DIR, "uploads")
     OUTPUT_DIR = os.path.join(SHARED_DIR, "outputs")
@@ -58,10 +33,8 @@ class Config:
     MAX_PHOTOS = 5
     RECOMMENDED_PHOTOS = 4
 
-    # Список администраторов
     ADMIN_IDS = [int(x) for x in os.getenv("ADMIN_IDS", "955206480").split(",") if x.strip()]
 
-    # ==================== СТИЛИ ДЛЯ ПАКЕТНОЙ ФОТОСЕССИИ ====================
     STYLES = {
         "luxury_interior": {
             "name": "🏠 Интерьерная съемка",

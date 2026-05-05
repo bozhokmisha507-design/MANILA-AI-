@@ -9,8 +9,6 @@ logger = logging.getLogger(__name__)
 
 class AITunnelService:
     TIMEOUT_FLASH = 90
-    TIMEOUT_MEDIUM = 120
-    TIMEOUT_HIGH = 180
 
     def __init__(self, model_key: str = "flash"):
         self.api_key = Config.AITUNNEL_API_KEY
@@ -18,13 +16,8 @@ class AITunnelService:
         self.model_key = model_key
         info = Config.PACKAGE_MODELS.get(model_key, Config.PACKAGE_MODELS["flash"])
         self.model_name = info["api_model"]
-        # quality не используем, т.к. для dall-e-2 он не поддерживается, а для gemini-3.1-flash тоже не нужен
         self.size = info.get("size", "1024x1024")
-        self.timeout = {
-            "flash": self.TIMEOUT_FLASH,
-            "medium": self.TIMEOUT_MEDIUM,
-            "high": self.TIMEOUT_HIGH
-        }.get(model_key, self.TIMEOUT_FLASH)
+        self.timeout = self.TIMEOUT_FLASH
 
     async def generate_package_photos(self, user_photo_paths: list, style_key: str, gender: str = None) -> list:
         style = Config.STYLES.get(style_key)
@@ -41,7 +34,6 @@ class AITunnelService:
         prompt = base_prompt.replace("{token}", subject)
         prompt += " Landscape orientation, horizontal composition, aspect ratio 16:9, wide format."
 
-        # Найдём существующее фото
         ref_photo = next((p for p in user_photo_paths if os.path.exists(p)), None)
         if not ref_photo:
             logger.error("Нет доступных фото пользователя")
@@ -63,12 +55,11 @@ class AITunnelService:
         payload = {
             "model": self.model_name,
             "prompt": prompt,
-            "n": 1,
+            "n": 8,
             "size": self.size,
             "response_format": "b64_json",
             "image": image_b64
         }
-        # Параметр quality не добавляем – для dall-e-2 он вызывает ошибку, для gemini не нужен
 
         timeout = aiohttp.ClientTimeout(total=self.timeout)
         images = []
