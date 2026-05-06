@@ -52,42 +52,20 @@ async def style_selected_callback(update: Update, context: ContextTypes.DEFAULT_
     context.user_data['selected_style'] = style_key
     logger.info(f"✅ Стиль {style_key} сохранён для user {user_id}")
 
-    # Показать выбор модели
-    keyboard = []
-    for model_key, info in Config.PACKAGE_MODELS.items():
-        btn = f"{info['name']} – {info['price_rub']}₽ / {info['price_tokens']} жетонов"
-        keyboard.append([InlineKeyboardButton(btn, callback_data=f"select_model_{model_key}")])
-    await query.edit_message_text(
-        f"✅ Стиль *{style['name']}* выбран.\n\nТеперь выбери модель генерации:",
-        parse_mode='Markdown',
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-
-async def model_selected_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    user_id = update.effective_user.id
-    model_key = query.data.replace("select_model_", "")
-    if model_key not in Config.PACKAGE_MODELS:
-        await query.edit_message_text("❌ Неизвестная модель.")
-        return
-    context.user_data['selected_model'] = model_key
+    model_key = "flash"
     model_info = Config.PACKAGE_MODELS[model_key]
-    style_key = context.user_data.get('selected_style')
-    style_name = Config.STYLES.get(style_key, {}).get('name', 'выбранный стиль')
-    db = await get_db()
-    tokens = await db.get_user_tokens(user_id)
+    context.user_data['selected_model'] = model_key
 
+    tokens = await db.get_user_tokens(user_id)
     keyboard = []
     if tokens >= model_info['price_tokens']:
         keyboard.append([InlineKeyboardButton(f"💎 Оплатить жетонами ({model_info['price_tokens']} шт., у вас {tokens})", callback_data="pay_with_tokens")])
     keyboard.append([InlineKeyboardButton(f"💳 Оплатить {model_info['price_rub']}₽", callback_data="pay_with_money")])
     keyboard.append([InlineKeyboardButton("◀️ Назад к стилям", callback_data="back_to_styles")])
 
+    batch = model_info.get('batch_size', 8)
     await query.edit_message_text(
-        f"✅ Ты выбрал: *{style_name}*, модель *{model_info['name']}*\n\n"
-        f"Пакет из {model_info.get('batch_size', 8)} фотографий стоит {model_info['price_rub']}₽ или {model_info['price_tokens']} жетонов.\n\n"
-        "👇 Как хочешь оплатить?",
+        f"✅ Стиль *{style['name']}* выбран.\n\nМодель: {model_info['name']}\nПакет из {batch} фотографий стоит {model_info['price_rub']}₽ или {model_info['price_tokens']} жетонов.\n\n👇 Как хочешь оплатить?",
         parse_mode='Markdown',
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
@@ -96,27 +74,27 @@ async def pay_with_tokens_callback(update: Update, context: ContextTypes.DEFAULT
     query = update.callback_query
     await query.answer()
     user_id = update.effective_user.id
-    model_key = context.user_data.get('selected_model')
+    model_key = context.user_data.get('selected_model', 'flash')
     style_key = context.user_data.get('selected_style')
-    if not model_key or not style_key:
-        await query.edit_message_text("❌ Сначала выбери стиль и модель.")
+    if not style_key:
+        await query.edit_message_text("❌ Сначала выбери стиль.")
         return
     model_info = Config.PACKAGE_MODELS[model_key]
     db = await get_db()
     if not await db.use_tokens(user_id, model_info['price_tokens']):
         await query.edit_message_text("❌ Недостаточно жетонов.")
         return
-    await query.edit_message_text(f"⏳ Генерация {model_info.get('batch_size', 8)} фото... Это может занять до 2 минут.")
+    await query.edit_message_text("⏳ Генерация фотосессии... Это может занять до 2 минут.")
     await generate_package(user_id, context.bot, db, context, style_key, model_key)
 
 async def pay_with_money_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     user_id = update.effective_user.id
-    model_key = context.user_data.get('selected_model')
+    model_key = context.user_data.get('selected_model', 'flash')
     style_key = context.user_data.get('selected_style')
-    if not model_key or not style_key:
-        await query.edit_message_text("❌ Сначала выбери стиль и модель.")
+    if not style_key:
+        await query.edit_message_text("❌ Сначала выбери стиль.")
         return
     model_info = Config.PACKAGE_MODELS[model_key]
     label = f"package_{user_id}_{uuid.uuid4().hex[:8]}"
@@ -193,7 +171,7 @@ async def generate_package(user_id: int, bot: Bot, db, context, style_key: str, 
 
 async def generate_package_from_data(user_id: int, bot: Bot, db, data: dict):
     style_key = data.get('style_key')
-    model_key = data.get('model_key', 'gpt_image_2')
+    model_key = data.get('model_key', 'flash')
     if not style_key:
         logger.error("Нет style_key")
         return
@@ -216,11 +194,9 @@ async def generate_package_from_data(user_id: int, bot: Bot, db, data: dict):
         await bot.send_message(user_id, "❌ Ошибка генерации.")
     await bot.send_message(user_id, text="👇 *Главное меню*:", parse_mode='Markdown', reply_markup=get_main_menu_keyboard())
 
-# ---------- Экспорт обработчиков ----------
 styles_handler = CommandHandler("styles", styles_command)
 show_styles_cb = CallbackQueryHandler(show_styles_callback, pattern="^show_styles$")
 style_selected_cb = CallbackQueryHandler(style_selected_callback, pattern="^select_style_")
-model_selected_cb = CallbackQueryHandler(model_selected_callback, pattern="^select_model_")
 pay_with_tokens_cb = CallbackQueryHandler(pay_with_tokens_callback, pattern="^pay_with_tokens$")
 pay_with_money_cb = CallbackQueryHandler(pay_with_money_callback, pattern="^pay_with_money$")
 back_to_styles_cb = CallbackQueryHandler(back_to_styles_callback, pattern="^back_to_styles$")
