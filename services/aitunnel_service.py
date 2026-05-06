@@ -26,7 +26,7 @@ class AITunnelService:
         if not style:
             raise ValueError(f"Неизвестный стиль: {style_key}")
 
-        # Выбираем промпт для мужчин/женщин
+        # Выбираем промпт в зависимости от пола
         if gender == 'male':
             prompt = style.get('prompt_male', style.get('prompt', ''))
             if '{token}' in prompt:
@@ -40,54 +40,47 @@ class AITunnelService:
             if '{token}' in prompt:
                 prompt = prompt.replace("{token}", "this person")
 
-        # Добавляем ориентацию и требование лица
         if "Landscape" not in prompt:
             prompt += " Landscape orientation, horizontal composition, aspect ratio 16:9, wide format."
         if "face clearly visible" not in prompt:
             prompt += " Face clearly visible, exact facial features as in the reference image."
 
-        logger.info(f"Промпт (первые 200 символов): {prompt[:200]}...")
+        logger.info(f"Промпт: {prompt[:200]}...")
 
-        # Референсное фото
         ref_photo = next((p for p in user_photo_paths if os.path.exists(p)), None)
         if not ref_photo:
-            logger.error("Нет доступных фото пользователя")
+            logger.error("Нет доступных фото")
             return []
 
         with open(ref_photo, "rb") as f:
-            image_b64 = base64.b64encode(f.read()).decode("utf-8")
-            data_url = f"data:image/jpeg;base64,{image_b64}"
+            image_bytes = f.read()
+        logger.info(f"Референс фото: {len(image_bytes)} байт")
 
-        url = f"{self.base_url}/images/generations"
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json"
-        }
-
+        url = f"{self.base_url}/images/edits"
+        headers = {"Authorization": f"Bearer {self.api_key}"}
         images = []
+
         async with aiohttp.ClientSession() as session:
             for i in range(self.batch_size):
-                payload = {
-                    "model": self.model_name,
-                    "prompt": prompt,
-                    "image": data_url,          # data URL (префикс)
-                    "n": 1,
-                    "size": self.size
-                    # response_format не передаём
-                }
-                logger.info(f"Запрос {i+1}/{self.batch_size} (generations)")
+                form_data = aiohttp.FormData()
+                form_data.add_field('model', self.model_name)
+                form_data.add_field('image', image_bytes, filename='photo.jpg', content_type='image/jpeg')
+                form_data.add_field('prompt', prompt)
+                form_data.add_field('n', '1')
+                form_data.add_field('size', self.size)
+                # Не добавляем response_format, пусть возвращает URL
+                logger.info(f"Запрос {i+1}/{self.batch_size} (edits)")
                 success = False
                 for attempt in range(3):
                     try:
-                        async with session.post(url, headers=headers, json=payload, timeout=self.TIMEOUT) as resp:
+                        async with session.post(url, headers=headers, data=form_data, timeout=self.TIMEOUT) as resp:
                             if resp.status == 200:
                                 data = await resp.json()
                                 if 'data' in data and len(data['data']):
                                     item = data['data'][0]
-                                    # Получаем URL изображения
+                                    # Получаем URL
                                     img_url = item.get('url')
                                     if img_url:
-                                        # Если это data URL, извлекаем base64
                                         if img_url.startswith('data:image/'):
                                             b64 = img_url.split(',')[1]
                                             images.append(b64)
@@ -95,7 +88,7 @@ class AITunnelService:
                                             logger.info(f"Фото {i+1} получено (data URL)")
                                             break
                                         else:
-                                            # Обычный URL – скачиваем
+                                            # Скачиваем по обычному URL
                                             async with session.get(img_url) as img_resp:
                                                 if img_resp.status == 200:
                                                     img_bytes = await img_resp.read()
@@ -104,6 +97,8 @@ class AITunnelService:
                                                     success = True
                                                     logger.info(f"Фото {i+1} получено (скачано)")
                                                     break
+                                else:
+                                    logger.warning(f"Нет data в ответе: {data}")
                             else:
                                 text = await resp.text()
                                 logger.error(f"Ошибка {resp.status}: {text[:300]}")
