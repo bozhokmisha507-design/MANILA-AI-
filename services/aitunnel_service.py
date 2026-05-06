@@ -35,9 +35,12 @@ class AITunnelService:
         else:
             prompt = prompt.replace("{token}", "this person")
 
-        # Общие инструкции для всех моделей
+        # Общие инструкции
         prompt += " Landscape orientation, horizontal composition, aspect ratio 16:9, wide format."
         prompt += " Face clearly visible, exact facial features as in the reference image."
+        # Запрет коллажей (критично для Gemini)
+        prompt += " One single image, no collages, no grids, no multiple frames. Single photograph."
+
         if self.model_type == "edits":
             prompt += " Change only the background, lighting, and scene. Preserve the subject's face, pose, appearance, and clothing."
 
@@ -82,7 +85,6 @@ class AITunnelService:
                                     data = await resp.json()
                                     if 'choices' in data and data['choices']:
                                         msg = data['choices'][0].get('message', {})
-                                        # Получаем base64 из images или content
                                         if 'images' in msg and msg['images']:
                                             img_url = msg['images'][0].get('image_url', {}).get('url')
                                             if img_url and img_url.startswith('data:image/'):
@@ -105,7 +107,7 @@ class AITunnelService:
                         logger.warning(f"Фото {i+1} не получено")
                     await asyncio.sleep(0.3)
             else:
-                # ---------- GPT Image 2 через /images/edits ----------
+                # ---------- GPT Image 2 через /images/edits (без quality и response_format) ----------
                 url = f"{self.base_url}/images/edits"
                 headers = {"Authorization": f"Bearer {self.api_key}"}
                 for i in range(self.batch_size):
@@ -115,8 +117,7 @@ class AITunnelService:
                     form_data.add_field('prompt', prompt)
                     form_data.add_field('n', '1')
                     form_data.add_field('size', self.size)
-                    form_data.add_field('quality', 'high')
-                    form_data.add_field('response_format', 'b64_json')
+                    # quality и response_format удалены
                     logger.info(f"GPT запрос {i+1}/{self.batch_size}")
                     success = False
                     for attempt in range(3):
@@ -126,19 +127,23 @@ class AITunnelService:
                                     data = await resp.json()
                                     if 'data' in data and data['data']:
                                         item = data['data'][0]
-                                        b64 = item.get('b64_json')
-                                        if b64:
-                                            images.append(b64)
-                                            success = True
-                                            logger.info(f"Фото {i+1} получено (b64)")
-                                            break
-                                        elif 'url' in item:
+                                        if 'url' in item:
                                             img_url = item['url']
                                             if img_url.startswith('data:image/'):
-                                                images.append(img_url.split(',')[1])
+                                                b64 = img_url.split(',')[1]
+                                                images.append(b64)
                                                 success = True
-                                                logger.info(f"Фото {i+1} получено из url")
+                                                logger.info(f"Фото {i+1} получено (data URL)")
                                                 break
+                                            else:
+                                                # Скачиваем по обычному URL
+                                                async with session.get(img_url) as img_resp:
+                                                    if img_resp.status == 200:
+                                                        img_bytes = await img_resp.read()
+                                                        images.append(base64.b64encode(img_bytes).decode())
+                                                        success = True
+                                                        logger.info(f"Фото {i+1} получено (скачано)")
+                                                        break
                                 else:
                                     text = await resp.text()
                                     logger.error(f"Ошибка {resp.status}: {text[:200]}")
