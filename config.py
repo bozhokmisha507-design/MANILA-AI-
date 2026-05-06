@@ -23,7 +23,7 @@ class Config:
             "price_tokens": 6,
             "api_model": "gpt-image-2",
             "size": "1024x1024",
-            "batch_size": 8
+            "batch_size": 1
         },
         "gpt_image_1_5": {
             "name": "🖌️ GPT Image 1.5 (Стандарт, 4 фото)",
@@ -31,7 +31,7 @@ class Config:
             "price_tokens": 3,
             "api_model": "gpt-image-1.5",
             "size": "1024x1024",
-            "batch_size": 4
+            "batch_size": 1
         }
     }
 
