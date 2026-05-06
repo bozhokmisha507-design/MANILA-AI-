@@ -20,7 +20,6 @@ from handlers.start import start_handler, help_handler, handle_main_menu_buttons
 from handlers.menu import menu_handler
 from handlers.styles import (
     styles_handler, show_styles_cb, style_selected_cb,
-    model_selected_cb,   # <-- добавлен импорт
     pay_with_tokens_cb, pay_with_money_cb, back_to_styles_cb
 )
 from handlers.upload import upload_conversation
@@ -87,7 +86,6 @@ async def main_async():
     # Callback-хендлеры
     application.add_handler(show_styles_cb)
     application.add_handler(style_selected_cb)
-    application.add_handler(model_selected_cb)   # <-- добавлен
     application.add_handler(pay_with_tokens_cb)
     application.add_handler(pay_with_money_cb)
     application.add_handler(back_to_styles_cb)
