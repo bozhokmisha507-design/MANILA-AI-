@@ -10,17 +10,16 @@ from yookassa import Configuration, Payment as YKPayment
 
 logger = logging.getLogger(__name__)
 
-WELCOME_MEDIA_FILE_ID = "BAACAgIAAxkBAAIBJ2n3gLzRDDXCJmYcMRd1bht-W1vHAAJmngACH-64S6dbeyxDvhZcOwQ"  # ваш рабочий file_id
+WELCOME_MEDIA_FILE_ID = "BAACAgIAAxkBAAIBJ2n3gLzRDDXCJmYcMRd1bht-W1vHAAJmngACH-64S6dbeyxDvhZcOwQ"
 OFFER_URL = "https://disk.yandex.ru/i/n9V2oNKPQ4Vbrw"
 
 Configuration.account_id = Config.YKASSA_SHOP_ID
 Configuration.secret_key = Config.YKASSA_SECRET_KEY
 
 async def send_welcome_message(chat_id: int, first_name: str, bot):
-    # Формируем текст с ценами динамически из PACKAGE_MODELS
     models_text = ""
-    for model_key, model_info in Config.PACKAGE_MODELS.items():
-        models_text += f"• {model_info['name']} – {model_info['price_rub']}₽ / {model_info['price_tokens']} жетонов\n"
+    for key, m in Config.PACKAGE_MODELS.items():
+        models_text += f"• {m['name']} – {m['price_rub']}₽ / {m['price_tokens']} жетонов\n"
 
     welcome_text = (
         f"🎨 *Привет, {first_name}!*\n\n"
@@ -137,7 +136,6 @@ async def gender_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await send_welcome_message(query.message.chat.id, update.effective_user.first_name, context.bot)
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Формируем список моделей динамически
     models_list = ""
     for key, m in Config.PACKAGE_MODELS.items():
         models_list += f"   • {m['name']} – {m['price_rub']}₽ / {m['price_tokens']} жетонов\n"
