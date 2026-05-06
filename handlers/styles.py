@@ -1,6 +1,7 @@
 import uuid
 import logging
 import asyncio
+import os
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Bot
 from telegram.ext import ContextTypes, CommandHandler, CallbackQueryHandler
 from config import Config
@@ -51,7 +52,11 @@ async def style_selected_callback(update: Update, context: ContextTypes.DEFAULT_
     context.user_data['selected_style'] = style_key
     logger.info(f"✅ Стиль {style_key} сохранён для user {user_id}")
 
-    model_key = "flash"
+    # ⚠️ Укажите здесь ключ модели, которая есть в Config.PACKAGE_MODELS (например, "gpt" или "pro")
+    model_key = "gpt"   # измените на актуальный ключ
+    if model_key not in Config.PACKAGE_MODELS:
+        await query.edit_message_text("❌ Модель временно недоступна. Попробуйте позже.")
+        return
     model_info = Config.PACKAGE_MODELS[model_key]
     context.user_data['selected_model'] = model_key
 
@@ -72,10 +77,13 @@ async def pay_with_tokens_callback(update: Update, context: ContextTypes.DEFAULT
     query = update.callback_query
     await query.answer()
     user_id = update.effective_user.id
-    model_key = context.user_data.get('selected_model', 'flash')
+    model_key = context.user_data.get('selected_model')
     style_key = context.user_data.get('selected_style')
-    if not style_key:
+    if not style_key or not model_key:
         await query.edit_message_text("❌ Сначала выбери стиль.")
+        return
+    if model_key not in Config.PACKAGE_MODELS:
+        await query.edit_message_text("❌ Модель недоступна.")
         return
     model_info = Config.PACKAGE_MODELS[model_key]
     db = await get_db()
@@ -89,14 +97,17 @@ async def pay_with_money_callback(update: Update, context: ContextTypes.DEFAULT_
     query = update.callback_query
     await query.answer()
     user_id = update.effective_user.id
-    model_key = context.user_data.get('selected_model', 'flash')
+    model_key = context.user_data.get('selected_model')
     style_key = context.user_data.get('selected_style')
-    if not style_key:
+    if not style_key or not model_key:
         await query.edit_message_text("❌ Сначала выбери стиль.")
+        return
+    if model_key not in Config.PACKAGE_MODELS:
+        await query.edit_message_text("❌ Модель недоступна.")
         return
     model_info = Config.PACKAGE_MODELS[model_key]
     label = f"package_{user_id}_{uuid.uuid4().hex[:8]}"
-    data = {'style_key': style_key, 'model_key': model_key, 'num_images': 8}
+    data = {'style_key': style_key, 'model_key': model_key}
     db = await get_db()
     await db.create_order(user_id, label, model_info['price_rub'], data=data)
     try:
@@ -135,8 +146,11 @@ async def generate_package(user_id: int, bot: Bot, db, context, style_key: str, 
             await bot.send_message(user_id, "❌ Стиль не найден.")
             return
         photo_paths = await db.get_user_photos(user_id, "input")
+        # Фильтруем только существующие файлы
+        photo_paths = [p for p in photo_paths if os.path.exists(p)]
         if not photo_paths:
-            await bot.send_message(user_id, "❌ Не найдены ваши фото.")
+            await bot.send_message(user_id, "❌ Ваши фото не найдены. Загрузите их заново.")
+            # Возвращаем жетоны, если они были списаны (но здесь они ещё не списаны, так как платёж уже прошёл – но на всякий случай)
             return
         gender = await db.get_user_gender(user_id)
         service = AITunnelService(model_key=model_key)
@@ -165,13 +179,14 @@ async def generate_package(user_id: int, bot: Bot, db, context, style_key: str, 
 
 async def generate_package_from_data(user_id: int, bot: Bot, db, data: dict):
     style_key = data.get('style_key')
-    model_key = data.get('model_key', 'flash')
+    model_key = data.get('model_key', 'gpt')
     if not style_key:
         logger.error("Нет style_key")
         return
     photo_paths = await db.get_user_photos(user_id, "input")
+    photo_paths = [p for p in photo_paths if os.path.exists(p)]
     if not photo_paths:
-        await bot.send_message(user_id, "❌ Нет фото.")
+        await bot.send_message(user_id, "❌ Ваши фото не найдены. Загрузите заново.")
         return
     gender = await db.get_user_gender(user_id)
     service = AITunnelService(model_key=model_key)

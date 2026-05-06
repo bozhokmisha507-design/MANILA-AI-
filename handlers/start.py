@@ -17,6 +17,11 @@ Configuration.account_id = Config.YKASSA_SHOP_ID
 Configuration.secret_key = Config.YKASSA_SECRET_KEY
 
 async def send_welcome_message(chat_id: int, first_name: str, bot):
+    # Формируем текст с ценами динамически из PACKAGE_MODELS
+    models_text = ""
+    for model_key, model_info in Config.PACKAGE_MODELS.items():
+        models_text += f"• {model_info['name']} – {model_info['price_rub']}₽ / {model_info['price_tokens']} жетонов\n"
+
     welcome_text = (
         f"🎨 *Привет, {first_name}!*\n\n"
         f"Добро пожаловать в *MANILA – AI Фотосессии*! 📸\n\n"
@@ -27,9 +32,7 @@ async def send_welcome_message(chat_id: int, first_name: str, bot):
         f"3. Выбери модель генерации\n"
         f"4. Оплати и получи 8 уникальных фото в разных ракурсах!\n\n"
         f"💎 *Цены за 8 фото:*\n"
-        f"• {Config.PACKAGE_MODELS['flash']['name']} – {Config.PACKAGE_MODELS['flash']['price_rub']}₽ / {Config.PACKAGE_MODELS['flash']['price_tokens']} жетонов\n"
-        f"• {Config.PACKAGE_MODELS['medium']['name']} – {Config.PACKAGE_MODELS['medium']['price_rub']}₽ / {Config.PACKAGE_MODELS['medium']['price_tokens']} жетонов\n"
-        f"• {Config.PACKAGE_MODELS['high']['name']} – {Config.PACKAGE_MODELS['high']['price_rub']}₽ / {Config.PACKAGE_MODELS['high']['price_tokens']} жетонов\n\n"
+        f"{models_text}\n"
         f"💳 *Способы оплаты:*\n"
         f"• Банковские карты (Visa, Mastercard, МИР)\n"
         f"• SberPay – для клиентов Сбера (удобно через приложение)\n"
@@ -134,15 +137,18 @@ async def gender_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await send_welcome_message(query.message.chat.id, update.effective_user.first_name, context.bot)
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Формируем список моделей динамически
+    models_list = ""
+    for key, m in Config.PACKAGE_MODELS.items():
+        models_list += f"   • {m['name']} – {m['price_rub']}₽ / {m['price_tokens']} жетонов\n"
+
     help_text = (
         "📖 *Помощь по MANILA AI Фотосессии*\n\n"
         "**Как заказать фотосессию из 8 кадров?**\n"
         "1. Нажми «📤 Загрузить фото» и отправь 2–5 своих селфи.\n"
         "2. Нажми «🖼️ Стили» и выбери сценарий.\n"
         "3. Выбери модель:\n"
-        f"   • {Config.PACKAGE_MODELS['flash']['name']} – {Config.PACKAGE_MODELS['flash']['price_rub']}₽ / {Config.PACKAGE_MODELS['flash']['price_tokens']} жетонов\n"
-        f"   • {Config.PACKAGE_MODELS['medium']['name']} – {Config.PACKAGE_MODELS['medium']['price_rub']}₽ / {Config.PACKAGE_MODELS['medium']['price_tokens']} жетонов\n"
-        f"   • {Config.PACKAGE_MODELS['high']['name']} – {Config.PACKAGE_MODELS['high']['price_rub']}₽ / {Config.PACKAGE_MODELS['high']['price_tokens']} жетонов\n"
+        f"{models_list}"
         "4. Оплати (рублями или жетонами) и через 1-2 минуты получи 8 фото.\n\n"
         "💳 *Способы оплаты:*\n"
         "• Банковские карты (Visa, Mastercard, МИР)\n"
@@ -183,12 +189,14 @@ async def handle_main_menu_buttons(update: Update, context: ContextTypes.DEFAULT
 # Секретная команда /getlink (админы)
 WAITING_MEDIA = 1
 AUTHORIZED_USERS = Config.ADMIN_IDS
+
 async def secret_get_link_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in AUTHORIZED_USERS:
         await update.message.reply_text("Команда не найдена.")
         return ConversationHandler.END
     await update.message.reply_text("🔒 Отправьте фото, видео или GIF.")
     return WAITING_MEDIA
+
 async def secret_get_link_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in AUTHORIZED_USERS:
         return ConversationHandler.END
@@ -197,6 +205,7 @@ async def secret_get_link_photo(update: Update, context: ContextTypes.DEFAULT_TY
     file_url = f"https://api.telegram.org/file/bot{context.bot.token}/{file.file_path}"
     await update.message.reply_text(f"✅ File ID:\n`{file_id}`\n\n🔗 Ссылка:\n`{file_url}`", parse_mode='Markdown')
     return ConversationHandler.END
+
 async def secret_get_link_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in AUTHORIZED_USERS:
         return ConversationHandler.END
@@ -205,6 +214,7 @@ async def secret_get_link_video(update: Update, context: ContextTypes.DEFAULT_TY
     file_url = f"https://api.telegram.org/file/bot{context.bot.token}/{file.file_path}"
     await update.message.reply_text(f"✅ File ID:\n`{file_id}`\n\n🔗 Ссылка:\n`{file_url}`", parse_mode='Markdown')
     return ConversationHandler.END
+
 async def secret_get_link_animation(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in AUTHORIZED_USERS:
         return ConversationHandler.END
@@ -213,9 +223,11 @@ async def secret_get_link_animation(update: Update, context: ContextTypes.DEFAUL
     file_url = f"https://api.telegram.org/file/bot{context.bot.token}/{file.file_path}"
     await update.message.reply_text(f"✅ File ID:\n`{file_id}`\n\n🔗 Ссылка:\n`{file_url}`", parse_mode='Markdown')
     return ConversationHandler.END
+
 async def secret_get_link_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Отменено.")
     return ConversationHandler.END
+
 secret_link_conv = ConversationHandler(
     entry_points=[CommandHandler("getlink", secret_get_link_start)],
     states={WAITING_MEDIA: [MessageHandler(filters.PHOTO, secret_get_link_photo), MessageHandler(filters.VIDEO, secret_get_link_video), MessageHandler(filters.ANIMATION, secret_get_link_animation), CommandHandler("cancel", secret_get_link_cancel)]},
