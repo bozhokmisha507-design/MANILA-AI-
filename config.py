@@ -18,21 +18,14 @@ class Config:
     # ==================== Пакетная фотосессия ====================
     PACKAGE_MODELS = {
         "gpt_image_2": {
-            "name": "🎨 GPT Image 2 (Премиум, 8 фото за раз)",
+            "name": "🎨 GPT Image 2 (Премиум, качественное сохранение лица)",
             "price_rub": 150,
             "price_tokens": 6,
             "api_model": "gpt-image-2",
             "size": "1024x1024",
-            "batch_size": 1
-        },
-        "gpt_image_1_5": {
-            "name": "🖌️ GPT Image 1.5 (Стандарт, 4 фото)",
-            "price_rub": 80,
-            "price_tokens": 3,
-            "api_model": "gpt-image-1.5",
-            "size": "1024x1024",
-            "batch_size": 1
+            "batch_size": 1   # для теста 1 фото, потом поменять на 8
         }
+        # другие модели временно отключены
     }
 
     PRICE_20_TOKENS = 700

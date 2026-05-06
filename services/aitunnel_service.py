@@ -26,19 +26,21 @@ class AITunnelService:
         if not style:
             raise ValueError(f"Неизвестный стиль: {style_key}")
 
-        # Выбираем промпт в зависимости от пола
+        # Выбираем промпт для мужчин/женщин
         if gender == 'male':
-            prompt = style.get('prompt_male')
-            if not prompt:
-                prompt = style.get('prompt', '').replace("{token}", "this man")
+            prompt = style.get('prompt_male', style.get('prompt', ''))
+            if '{token}' in prompt:
+                prompt = prompt.replace("{token}", "this man")
         elif gender == 'female':
-            prompt = style.get('prompt_female')
-            if not prompt:
-                prompt = style.get('prompt', '').replace("{token}", "this woman")
+            prompt = style.get('prompt_female', style.get('prompt', ''))
+            if '{token}' in prompt:
+                prompt = prompt.replace("{token}", "this woman")
         else:
-            prompt = style.get('prompt', '').replace("{token}", "this person")
+            prompt = style.get('prompt', '')
+            if '{token}' in prompt:
+                prompt = prompt.replace("{token}", "this person")
 
-        # Добавляем горизонтальную ориентацию
+        # Добавляем ориентацию и требование лица
         if "Landscape" not in prompt:
             prompt += " Landscape orientation, horizontal composition, aspect ratio 16:9, wide format."
         if "face clearly visible" not in prompt:
@@ -46,52 +48,62 @@ class AITunnelService:
 
         logger.info(f"Промпт (первые 200 символов): {prompt[:200]}...")
 
-        # Берём первое существующее референсное фото
+        # Референсное фото
         ref_photo = next((p for p in user_photo_paths if os.path.exists(p)), None)
         if not ref_photo:
             logger.error("Нет доступных фото пользователя")
             return []
 
         with open(ref_photo, "rb") as f:
-            image_bytes = f.read()
-        logger.info(f"Референс фото загружено, размер {len(image_bytes)} байт")
+            image_b64 = base64.b64encode(f.read()).decode("utf-8")
+            data_url = f"data:image/jpeg;base64,{image_b64}"
 
-        url = f"{self.base_url}/images/edits"
-        headers = {"Authorization": f"Bearer {self.api_key}"}
+        url = f"{self.base_url}/images/generations"
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
+        }
+
         images = []
-
         async with aiohttp.ClientSession() as session:
             for i in range(self.batch_size):
-                form_data = aiohttp.FormData()
-                form_data.add_field('model', self.model_name)
-                form_data.add_field('image', image_bytes, filename='photo.jpg', content_type='image/jpeg')
-                form_data.add_field('prompt', prompt)
-                form_data.add_field('n', '1')
-                form_data.add_field('size', self.size)
-                form_data.add_field('response_format', 'b64_json')
-
-                logger.info(f"Запрос {i+1}/{self.batch_size} (edits)")
+                payload = {
+                    "model": self.model_name,
+                    "prompt": prompt,
+                    "image": data_url,          # data URL (префикс)
+                    "n": 1,
+                    "size": self.size
+                    # response_format не передаём
+                }
+                logger.info(f"Запрос {i+1}/{self.batch_size} (generations)")
                 success = False
                 for attempt in range(3):
                     try:
-                        async with session.post(url, headers=headers, data=form_data, timeout=self.TIMEOUT) as resp:
+                        async with session.post(url, headers=headers, json=payload, timeout=self.TIMEOUT) as resp:
                             if resp.status == 200:
                                 data = await resp.json()
                                 if 'data' in data and len(data['data']):
                                     item = data['data'][0]
-                                    b64 = item.get('b64_json')
-                                    if b64:
-                                        images.append(b64)
-                                        success = True
-                                        logger.info(f"Фото {i+1} получено (b64)")
-                                        break
-                                    url_img = item.get('url')
-                                    if url_img and url_img.startswith('data:image/'):
-                                        b64 = url_img.split(',')[1]
-                                        images.append(b64)
-                                        success = True
-                                        logger.info(f"Фото {i+1} получено из url")
-                                        break
+                                    # Получаем URL изображения
+                                    img_url = item.get('url')
+                                    if img_url:
+                                        # Если это data URL, извлекаем base64
+                                        if img_url.startswith('data:image/'):
+                                            b64 = img_url.split(',')[1]
+                                            images.append(b64)
+                                            success = True
+                                            logger.info(f"Фото {i+1} получено (data URL)")
+                                            break
+                                        else:
+                                            # Обычный URL – скачиваем
+                                            async with session.get(img_url) as img_resp:
+                                                if img_resp.status == 200:
+                                                    img_bytes = await img_resp.read()
+                                                    b64 = base64.b64encode(img_bytes).decode()
+                                                    images.append(b64)
+                                                    success = True
+                                                    logger.info(f"Фото {i+1} получено (скачано)")
+                                                    break
                             else:
                                 text = await resp.text()
                                 logger.error(f"Ошибка {resp.status}: {text[:300]}")
