@@ -35,13 +35,15 @@ class AITunnelService:
         else:
             prompt = prompt.replace("{token}", "this person")
 
-        # Добавляем ориентацию и требование лица
+        # Добавляем ориентацию, требование лица и ЗАПРЕТ КОЛЛАЖА
         if "Landscape" not in prompt:
             prompt += " Landscape orientation, horizontal composition, aspect ratio 16:9, wide format."
         if "face clearly visible" not in prompt:
             prompt += " Face clearly visible, exact facial features as in the reference image."
+        # Ключевая строка против коллажей
+        prompt += " One single image, no collages, no grids, no multiple frames. Single photograph."
 
-        logger.info(f"Промпт: {prompt[:200]}...")
+        logger.info(f"Промпт: {prompt[:300]}...")
 
         # Референсное фото
         ref_photo = next((p for p in user_photo_paths if os.path.exists(p)), None)
@@ -86,7 +88,6 @@ class AITunnelService:
                                 data = await resp.json()
                                 if 'choices' in data and data['choices']:
                                     message = data['choices'][0].get('message', {})
-                                    # Способ из PIXEL: images -> image_url -> url
                                     if 'images' in message and message['images']:
                                         img_url = message['images'][0].get('image_url', {}).get('url')
                                         if img_url and img_url.startswith('data:image/'):
@@ -95,7 +96,6 @@ class AITunnelService:
                                             success = True
                                             logger.info(f"Фото {i+1} получено (images)")
                                             break
-                                    # Запасной вариант: content содержит data URL
                                     if 'content' in message and isinstance(message['content'], str) and message['content'].startswith('data:image'):
                                         b64 = message['content'].split(',')[1]
                                         images.append(b64)
