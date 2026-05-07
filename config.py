@@ -17,25 +17,25 @@ class Config:
 
     # ==================== Пакетная фотосессия – две модели ====================
     PACKAGE_MODELS = {
-        "gemini": {
-            "name": "✨ Gemini 3 Pro (высокое качество, точное лицо)",
-            "price_rub": 150,
-            "price_tokens": 6,
-            "api_model": "gemini-3-pro-image-preview",
-            "size": "1024x1024",
-            "batch_size": 1,        # тест – 1 фото, потом 8
-            "type": "chat"          # эндпоинт /chat/completions
-        },
-        "gpt": {
-            "name": "🎨 GPT Image 2 (премиум, max детализация)",
-            "price_rub": 180,
-            "price_tokens": 8,
-            "api_model": "gpt-image-2",
-            "size": "1024x1024",
-            "batch_size": 1,        # тест – 1 фото, потом 8
-            "type": "edits"         # эндпоинт /images/edits
-        }
+    "gemini": {
+        "name": "✨ Gemini 3 Pro (высокое качество, точное лицо)",
+        "price_rub": 150,
+        "price_tokens": 6,
+        "api_model": "gemini-3-pro-image-preview",
+        "size": "1024x1024",
+        "batch_size": 1,
+        "type": "chat"
+    },
+    "flux": {
+        "name": "⚡ Flux.2 Flex (быстро, доступно, точное лицо)",
+        "price_rub": 70,          # 8.64 * 8 ≈ 70₽ за пакет 8 фото
+        "price_tokens": 3,
+        "api_model": "flux.2-flex",
+        "size": "1024x1024",
+        "batch_size": 1,
+        "type": "edits"
     }
+}
 
     PRICE_20_TOKENS = 700
     PAYMENT_PROVIDER_TOKEN = os.getenv("PAYMENT_PROVIDER_TOKEN", "")
