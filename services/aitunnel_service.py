@@ -17,7 +17,7 @@ class AITunnelService:
         self.base_url = "https://api.aitunnel.ru/v1"
         self.model_name = info["api_model"]
         self.size = info.get("size", "1024x1024")
-        self.batch_size = info.get("batch_size", 8)
+        self.batch_size = info.get("batch_size", 4)  # по умолчанию 4
         self.model_type = info.get("type", "chat")
         logger.info(f"AITunnelService: model={self.model_name}, type={self.model_type}, batch={self.batch_size}")
 
@@ -55,7 +55,7 @@ class AITunnelService:
         images = []
         async with aiohttp.ClientSession() as session:
             if self.model_type == "chat":
-                # ----- Gemini через /chat/completions (уже рабочий) -----
+                # ----- Gemini через /chat/completions -----
                 data_url = f"data:image/jpeg;base64,{base64.b64encode(image_bytes).decode()}"
                 headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
                 for i in range(self.batch_size):
@@ -106,8 +106,7 @@ class AITunnelService:
                         logger.warning(f"Фото {i+1} не получено после 3 попыток")
                     await asyncio.sleep(0.3)
 
-            else:  # self.model_type == "edits" – для Flux (и GPT, если вернёте)
-                # ----- Flux / GPT через /images/edits -----
+            else:  # self.model_type == "edits" – для Flux
                 url = f"{self.base_url}/images/edits"
                 headers = {"Authorization": f"Bearer {self.api_key}"}
                 for i in range(self.batch_size):
@@ -117,7 +116,6 @@ class AITunnelService:
                     form_data.add_field('prompt', prompt)
                     form_data.add_field('n', '1')
                     form_data.add_field('size', self.size)
-                    # quality не отправляем – не поддерживается
                     logger.info(f"Flux запрос {i+1}/{self.batch_size}")
                     success = False
                     for attempt in range(3):
@@ -125,7 +123,6 @@ class AITunnelService:
                             async with session.post(url, headers=headers, data=form_data, timeout=self.TIMEOUT) as resp:
                                 if resp.status == 200:
                                     response_text = await resp.text()
-                                    # Пытаемся разобрать JSON
                                     try:
                                         data = await resp.json()
                                         if 'data' in data and data['data']:
@@ -139,7 +136,6 @@ class AITunnelService:
                                                     logger.info(f"Фото {i+1} получено (data URL)")
                                                     break
                                                 else:
-                                                    # Обычный URL – скачиваем
                                                     async with session.get(img_url) as img_resp:
                                                         if img_resp.status == 200:
                                                             img_bytes = await img_resp.read()
