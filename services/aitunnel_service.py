@@ -9,7 +9,8 @@ from config import Config
 logger = logging.getLogger(__name__)
 
 class AITunnelService:
-    TIMEOUT = 120
+    TIMEOUT = 300  # увеличен до 5 минут
+    RETRIES = 3
 
     def __init__(self, model_key: str = "gemini"):
         info = Config.PACKAGE_MODELS.get(model_key, Config.PACKAGE_MODELS["gemini"])
@@ -18,7 +19,7 @@ class AITunnelService:
         self.model_name = info["api_model"]
         self.size = info.get("size", "1024x1024")
         self.batch_size = info.get("batch_size", 8)
-        self.model_type = info.get("type", "chat")
+        self.model_type = info.get("type", "chat")  # "chat" или "edits"
         logger.info(f"AITunnelService: model={self.model_name}, type={self.model_type}, batch={self.batch_size}")
 
     async def generate_package_photos(self, user_photo_paths: list, style_key: str, gender: str = None) -> list:
@@ -26,7 +27,7 @@ class AITunnelService:
         if not style:
             raise ValueError(f"Неизвестный стиль: {style_key}")
 
-        # Базовый промпт + гендер
+        # Формируем промпт
         prompt = style.get('prompt', '')
         if gender == 'male':
             prompt = prompt.replace("{token}", "this man")
@@ -38,13 +39,13 @@ class AITunnelService:
         # Общие инструкции
         prompt += " Landscape orientation, horizontal composition, aspect ratio 16:9, wide format."
         prompt += " Face clearly visible, exact facial features as in the reference image."
-        # Запрет коллажей (критично для Gemini)
         prompt += " One single image, no collages, no grids, no multiple frames. Single photograph."
-
         if self.model_type == "edits":
             prompt += " Change only the background, lighting, and scene. Preserve the subject's face, pose, appearance, and clothing."
 
-        # Референс
+        logger.info(f"Промпт: {prompt[:300]}...")
+
+        # Референсное фото
         ref_photo = next((p for p in user_photo_paths if os.path.exists(p)), None)
         if not ref_photo:
             logger.error("Нет доступных фото пользователя")
@@ -52,6 +53,7 @@ class AITunnelService:
 
         with open(ref_photo, "rb") as f:
             image_bytes = f.read()
+        logger.info(f"Референс фото: {len(image_bytes)} байт")
 
         images = []
         async with aiohttp.ClientSession() as session:
@@ -78,7 +80,7 @@ class AITunnelService:
                     }
                     logger.info(f"Gemini запрос {i+1}/{self.batch_size}")
                     success = False
-                    for attempt in range(3):
+                    for attempt in range(self.RETRIES):
                         try:
                             async with session.post(f"{self.base_url}/chat/completions", headers=headers, json=payload, timeout=self.TIMEOUT) as resp:
                                 if resp.status == 200:
@@ -88,12 +90,14 @@ class AITunnelService:
                                         if 'images' in msg and msg['images']:
                                             img_url = msg['images'][0].get('image_url', {}).get('url')
                                             if img_url and img_url.startswith('data:image/'):
-                                                images.append(img_url.split(',')[1])
+                                                b64 = img_url.split(',')[1]
+                                                images.append(b64)
                                                 success = True
                                                 logger.info(f"Фото {i+1} получено (images)")
                                                 break
                                         if 'content' in msg and isinstance(msg['content'], str) and msg['content'].startswith('data:image'):
-                                            images.append(msg['content'].split(',')[1])
+                                            b64 = msg['content'].split(',')[1]
+                                            images.append(b64)
                                             success = True
                                             logger.info(f"Фото {i+1} получено (content)")
                                             break
@@ -106,8 +110,9 @@ class AITunnelService:
                     if not success:
                         logger.warning(f"Фото {i+1} не получено")
                     await asyncio.sleep(0.3)
+
             else:
-                # ---------- GPT Image 2 через /images/edits (без quality и response_format) ----------
+                # ---------- GPT Image 2 через /images/edits ----------
                 url = f"{self.base_url}/images/edits"
                 headers = {"Authorization": f"Bearer {self.api_key}"}
                 for i in range(self.batch_size):
@@ -120,7 +125,7 @@ class AITunnelService:
                     # quality и response_format удалены
                     logger.info(f"GPT запрос {i+1}/{self.batch_size}")
                     success = False
-                    for attempt in range(3):
+                    for attempt in range(self.RETRIES):
                         try:
                             async with session.post(url, headers=headers, data=form_data, timeout=self.TIMEOUT) as resp:
                                 if resp.status == 200:
@@ -136,7 +141,6 @@ class AITunnelService:
                                                 logger.info(f"Фото {i+1} получено (data URL)")
                                                 break
                                             else:
-                                                # Скачиваем по обычному URL
                                                 async with session.get(img_url) as img_resp:
                                                     if img_resp.status == 200:
                                                         img_bytes = await img_resp.read()
@@ -146,12 +150,14 @@ class AITunnelService:
                                                         break
                                 else:
                                     text = await resp.text()
-                                    logger.error(f"Ошибка {resp.status}: {text[:200]}")
+                                    logger.error(f"Ошибка {resp.status}: {text[:300]}")
+                        except asyncio.TimeoutError:
+                            logger.error(f"Таймаут при попытке {attempt+1} для фото {i+1}. Увеличьте TIMEOUT в коде, если ошибка повторяется.")
                         except Exception as e:
-                            logger.error(f"Попытка {attempt+1}: {e}")
+                            logger.error(f"Попытка {attempt+1} не удалась: {e}", exc_info=True)
                         await asyncio.sleep(1.5 * (2 ** attempt))
                     if not success:
-                        logger.warning(f"Фото {i+1} не получено")
+                        logger.warning(f"Фото {i+1} не получено после {self.RETRIES} попыток")
                     await asyncio.sleep(0.3)
 
         logger.info(f"Сгенерировано {len(images)} фото")
