@@ -15,9 +15,8 @@ logger = logging.getLogger(__name__)
 Configuration.account_id = Config.YKASSA_SHOP_ID
 Configuration.secret_key = Config.YKASSA_SECRET_KEY
 
-# ---------- Команда /buy (покупка пакета) – теперь просто перенаправляет на выбор стиля ----------
+# ---------- Команда /buy (перенаправление) ----------
 async def buy_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # В MANILA покупка пакета начинается с выбора стиля
     await update.message.reply_text(
         "🎨 Для покупки фотосессии сначала выбери стиль через кнопку «🖼️ Стили» в главном меню.",
         reply_markup=get_main_menu_keyboard()
@@ -38,7 +37,7 @@ async def buy_tokens_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
             "capture": True,
             "confirmation": {
                 "type": "redirect",
-                "return_url": f"https://t.me/bma3_bot?start=tokens_{label}"
+                "return_url": f"https://t.me/BozhokAI_bot?start=tokens_{label}"
             },
             "description": f"Пакет 20 жетонов – фотосессии со скидкой",
             "metadata": {"label": label, "user_id": user_id}
@@ -72,7 +71,7 @@ async def buy_tokens_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
             "capture": True,
             "confirmation": {
                 "type": "redirect",
-                "return_url": f"https://t.me/bma3_bot?start=tokens_{label}"
+                "return_url": f"https://t.me/BozhokAI_bot?start=tokens_{label}"
             },
             "description": f"Пакет 20 жетонов",
             "metadata": {"label": label, "user_id": user_id}
@@ -90,21 +89,29 @@ async def buy_tokens_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-# ---------- Показать баланс жетонов ----------
+# ---------- Показать баланс жетонов (исправлено – динамически) ----------
 async def my_tokens_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     db = await get_db()
     tokens = await db.get_user_tokens(user_id)
+
+    # Формируем список моделей из PACKAGE_MODELS
+    models_text = ""
+    for model_key, model in Config.PACKAGE_MODELS.items():
+        models_text += f"• {model['name']} – {model['price_tokens']} жетонов (пакет {model.get('batch_size', 4)} фото)\n"
+
     text = (
         f"💎 *Ваш баланс жетонов:* {tokens}\n\n"
-        "Стоимость пакетов (8 фото):\n"
-        f"• {Config.PACKAGE_MODELS['flash']['name']} – {Config.PACKAGE_MODELS['flash']['price_tokens']} жетонов\n"
-        f"• {Config.PACKAGE_MODELS['medium']['name']} – {Config.PACKAGE_MODELS['medium']['price_tokens']} жетонов\n"
-        f"• {Config.PACKAGE_MODELS['high']['name']} – {Config.PACKAGE_MODELS['high']['price_tokens']} жетонов\n\n"
-        "Пополнить баланс: /buy20"
+        f"💰 *Стоимость пакетов:*\n"
+        f"{models_text}\n"
+        f"💎 Жетоны можно купить кнопкой ниже."
     )
     keyboard = [[InlineKeyboardButton("💎 Купить 20 жетонов за 700₽", callback_data="buy_tokens")]]
-    await update.message.reply_text(text, parse_mode='Markdown', reply_markup=InlineKeyboardMarkup(keyboard))
+    await update.message.reply_text(
+        text,
+        parse_mode='Markdown',
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
 
 # ---------- Обработка вебхука ЮKassa ----------
 async def process_yookassa_webhook(data: dict, bot: Bot, db):
@@ -152,9 +159,9 @@ async def process_yookassa_webhook(data: dict, bot: Bot, db):
             await generate_package_from_data(user_id, bot, db, order_data)
         except Exception as e:
             logger.error(f"Ошибка генерации пакета {label}: {e}", exc_info=True)
-            # Начисляем компенсационные жетоны (стоимость пакета в жетонах)
-            model_key = order_data.get('model_key', 'flash')
-            token_cost = Config.PACKAGE_MODELS.get(model_key, Config.PACKAGE_MODELS['flash'])['price_tokens']
+            # Начисляем компенсационные жетоны
+            model_key = order_data.get('model_key', 'gemini')
+            token_cost = Config.PACKAGE_MODELS.get(model_key, Config.PACKAGE_MODELS['gemini'])['price_tokens']
             await db.add_tokens(user_id, token_cost)
             await bot.send_message(user_id, f"⚠️ Ошибка генерации фотосессии. Вам начислено {token_cost} жетонов. Попробуйте позже.")
         finally:
