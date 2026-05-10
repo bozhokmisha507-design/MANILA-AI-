@@ -9,7 +9,7 @@ from config import Config
 logger = logging.getLogger(__name__)
 
 class AITunnelService:
-    TIMEOUT = 180
+    TIMEOUT = 180  # секунд
 
     def __init__(self, model_key: str = "gemini"):
         info = Config.PACKAGE_MODELS.get(model_key, Config.PACKAGE_MODELS["gemini"])
@@ -26,7 +26,7 @@ class AITunnelService:
         if not style:
             raise ValueError(f"Неизвестный стиль: {style_key}")
 
-        # Базовый промпт
+        # Базовый промпт с учётом пола
         prompt = style.get('prompt', '')
         if gender == 'male':
             prompt = prompt.replace("{token}", "this man")
@@ -35,6 +35,7 @@ class AITunnelService:
         else:
             prompt = prompt.replace("{token}", "this person")
 
+        # Универсальные улучшения промпта
         prompt += " Landscape orientation, horizontal composition, aspect ratio 16:9, wide format."
         prompt += " Face clearly visible, exact facial features as in the reference image."
         prompt += " One single image, no collages, no grids, no multiple frames. Single photograph."
@@ -55,7 +56,7 @@ class AITunnelService:
         images = []
         async with aiohttp.ClientSession() as session:
             if self.model_type == "chat":
-                # ----- Gemini через /chat/completions -----
+                # ---------- Gemini (уже рабочий) ----------
                 data_url = f"data:image/jpeg;base64,{base64.b64encode(image_bytes).decode()}"
                 headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
                 for i in range(self.batch_size):
@@ -106,39 +107,54 @@ class AITunnelService:
                         logger.warning(f"Фото {i+1} не получено после 3 попыток")
                     await asyncio.sleep(0.3)
 
-            else:  # self.model_type in ("edits", "edits_high")
+            else:
+                # ---------- GPT Image 2 (и Flux) через /images/edits ----------
                 url = f"{self.base_url}/images/edits"
                 headers = {"Authorization": f"Bearer {self.api_key}"}
                 for i in range(self.batch_size):
-                    form_data = aiohttp.FormData()
-                    form_data.add_field('model', self.model_name)
-                    form_data.add_field('image', image_bytes, filename='photo.jpg', content_type='image/jpeg')
-                    form_data.add_field('prompt', prompt)
-                    form_data.add_field('n', '1')
-                    form_data.add_field('size', self.size)
-                    # Для высокой детализации добавляем quality
-                    if self.model_type == "edits_high":
-                        form_data.add_field('quality', 'high')
                     logger.info(f"GPT/Flux запрос {i+1}/{self.batch_size}")
                     success = False
                     for attempt in range(3):
                         try:
+                            # Создаём FormData заново для каждой попытки
+                            form_data = aiohttp.FormData()
+                            form_data.add_field('model', self.model_name)
+                            form_data.add_field('image', image_bytes, filename='photo.jpg', content_type='image/jpeg')
+                            form_data.add_field('prompt', prompt)
+                            form_data.add_field('n', '1')
+                            form_data.add_field('size', self.size)
+                            if self.model_type == "edits_high":
+                                form_data.add_field('quality', 'high')
+                                logger.debug("Добавлен параметр quality=high")
+                            # Не добавляем response_format – полагаемся на url
+
                             async with session.post(url, headers=headers, data=form_data, timeout=self.TIMEOUT) as resp:
+                                # Сохраняем текст ответа для диагностики
+                                resp_text = await resp.text()
                                 if resp.status == 200:
-                                    response_text = await resp.text()
                                     try:
                                         data = await resp.json()
                                         if 'data' in data and data['data']:
                                             item = data['data'][0]
-                                            if 'url' in item:
-                                                img_url = item['url']
+                                            # Пытаемся получить b64_json
+                                            b64 = item.get('b64_json')
+                                            if b64:
+                                                images.append(b64)
+                                                success = True
+                                                logger.info(f"Фото {i+1} получено (b64_json)")
+                                                break
+                                            # Если нет – берём url
+                                            img_url = item.get('url')
+                                            if img_url:
                                                 if img_url.startswith('data:image/'):
+                                                    # Это data URL – извлекаем base64
                                                     b64 = img_url.split(',')[1]
                                                     images.append(b64)
                                                     success = True
                                                     logger.info(f"Фото {i+1} получено (data URL)")
                                                     break
                                                 else:
+                                                    # Обычный URL – скачиваем
                                                     async with session.get(img_url) as img_resp:
                                                         if img_resp.status == 200:
                                                             img_bytes = await img_resp.read()
@@ -146,11 +162,12 @@ class AITunnelService:
                                                             success = True
                                                             logger.info(f"Фото {i+1} получено (скачано)")
                                                             break
+                                        else:
+                                            logger.error(f"Нет data в ответе: {data}")
                                     except Exception as json_err:
-                                        logger.error(f"Ошибка парсинга JSON: {json_err}. Ответ: {response_text[:300]}")
+                                        logger.error(f"Ошибка парсинга JSON: {json_err}. Ответ: {resp_text[:300]}")
                                 else:
-                                    text = await resp.text()
-                                    logger.error(f"Ошибка {resp.status}: {text[:300]}")
+                                    logger.error(f"Ошибка {resp.status}: {resp_text[:300]}")
                         except Exception as e:
                             logger.error(f"Попытка {attempt+1}: {e}")
                         await asyncio.sleep(1.5 * (2 ** attempt))
