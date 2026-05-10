@@ -10,33 +10,35 @@ from yookassa import Configuration, Payment as YKPayment
 
 logger = logging.getLogger(__name__)
 
-WELCOME_MEDIA_FILE_ID = "BAACAgIAAxkBAAIBJ2n3gLzRDDXCJmYcMRd1bht-W1vHAAJmngACH-64S6dbeyxDvhZcOwQ"  # ваш file_id
+WELCOME_MEDIA_FILE_ID = "BAACAgIAAxkBAAIBJ2n3gLzRDDXCJmYcMRd1bht-W1vHAAJmngACH-64S6dbeyxDvhZcOwQ"  # замените на свой
 OFFER_URL = "https://disk.yandex.ru/i/n9V2oNKPQ4Vbrw"
 
 Configuration.account_id = Config.YKASSA_SHOP_ID
 Configuration.secret_key = Config.YKASSA_SECRET_KEY
 
 async def send_welcome_message(chat_id: int, first_name: str, bot):
-    # Формируем текст с ценами динамически
+    # Формируем список моделей
     models_text = ""
     for key, m in Config.PACKAGE_MODELS.items():
-        # Показываем, что пакет из 4 фото
-        models_text += f"• {m['name']} – {m['price_rub']}₽ / {m['price_tokens']} жетонов (пакет 4 фото)\n"
-
+        batch = m.get('batch_size', 4)
+        if batch == 1:
+            models_text += f"• {m['name']} – {m['price_rub']}₽ / {m['price_tokens']} жетонов (1 фото максимального качества)\n"
+        else:
+            models_text += f"• {m['name']} – {m['price_rub']}₽ / {m['price_tokens']} жетонов (пакет {batch} фото)\n"
     welcome_text = (
         f"🎨 *Привет, {first_name}!*\n\n"
         f"Добро пожаловать в *MANILA – AI Фотосессии*! 📸\n\n"
-        f"Я превращу твои селфи в профессиональную фотосессию из **4 кадров**.\n\n"
+        f"Я превращу твои селфи в профессиональные фото.\n\n"
         f"🔥 *Как это работает:*\n"
         f"1. Загрузи 2–5 своих фото\n"
         f"2. Выбери сценарий (интерьер, парк, набережная, кафе, студия, сквер)\n"
         f"3. Выбери модель генерации\n"
-        f"4. Оплати и получи 4 уникальных фото в разных ракурсах!\n\n"
-        f"💎 *Цены за 4 фото:*\n"
+        f"4. Оплати и получи свои фото!\n\n"
+        f"💎 *Доступные варианты:*\n"
         f"{models_text}\n"
         f"💳 *Способы оплаты:*\n"
         f"• Банковские карты (Visa, Mastercard, МИР)\n"
-        f"• SberPay – для клиентов Сбера (удобно через приложение)\n"
+        f"• SberPay – для клиентов Сбера\n"
         f"• T-Pay – для клиентов Т-Банка\n"
         f"• СБП (Система быстрых платежей) – оплата по QR-коду\n\n"
         f"👇 Жми на кнопки ниже и создавай свою идеальную фотосессию!"
@@ -138,19 +140,21 @@ async def gender_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await send_welcome_message(query.message.chat.id, update.effective_user.first_name, context.bot)
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Формируем список моделей
     models_list = ""
     for key, m in Config.PACKAGE_MODELS.items():
-        models_list += f"   • {m['name']} – {m['price_rub']}₽ / {m['price_tokens']} жетонов (пакет 4 фото)\n"
-
+        batch = m.get('batch_size', 4)
+        if batch == 1:
+            models_list += f"   • {m['name']} – {m['price_rub']}₽ / {m['price_tokens']} жетонов (1 фото максимального качества)\n"
+        else:
+            models_list += f"   • {m['name']} – {m['price_rub']}₽ / {m['price_tokens']} жетонов (пакет {batch} фото)\n"
     help_text = (
         "📖 *Помощь по MANILA AI Фотосессии*\n\n"
-        "**Как заказать фотосессию из 4 кадров?**\n"
+        "**Как заказать фотосессию?**\n"
         "1. Нажми «📤 Загрузить фото» и отправь 2–5 своих селфи.\n"
         "2. Нажми «🖼️ Стили» и выбери сценарий.\n"
         "3. Выбери модель:\n"
         f"{models_list}"
-        "4. Оплати (рублями или жетонами) и через 1-2 минуты получи 4 фото.\n\n"
+        "4. Оплати (рублями или жетонами) и через 1-2 минуты получи готовые фото.\n\n"
         "💳 *Способы оплаты:*\n"
         "• Банковские карты (Visa, Mastercard, МИР)\n"
         "• SberPay – для клиентов Сбера\n"

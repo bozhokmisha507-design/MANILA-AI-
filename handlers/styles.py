@@ -85,9 +85,10 @@ async def model_selected_callback(update: Update, context: ContextTypes.DEFAULT_
     keyboard.append([InlineKeyboardButton(f"💳 Оплатить {model_info['price_rub']}₽", callback_data="pay_with_money")])
     keyboard.append([InlineKeyboardButton("◀️ Назад к стилям", callback_data="back_to_styles")])
 
+    batch = model_info.get('batch_size', 4)
     await query.edit_message_text(
         f"✅ Ты выбрал: *{style_name}*, модель *{model_info['name']}*\n\n"
-        f"Пакет из {model_info.get('batch_size', 8)} фотографий стоит {model_info['price_rub']}₽ или {model_info['price_tokens']} жетонов.\n\n"
+        f"Пакет из {batch} фотографий стоит {model_info['price_rub']}₽ или {model_info['price_tokens']} жетонов.\n\n"
         "👇 Как хочешь оплатить?",
         parse_mode='Markdown',
         reply_markup=InlineKeyboardMarkup(keyboard)
@@ -107,7 +108,7 @@ async def pay_with_tokens_callback(update: Update, context: ContextTypes.DEFAULT
     if not await db.use_tokens(user_id, model_info['price_tokens']):
         await query.edit_message_text("❌ Недостаточно жетонов.")
         return
-    await query.edit_message_text(f"⏳ Генерация {model_info.get('batch_size', 8)} фото... Это может занять до 2 минут.")
+    await query.edit_message_text(f"⏳ Генерация {model_info.get('batch_size', 4)} фото... Это может занять до 2 минут.")
     await generate_package(user_id, context.bot, db, context, style_key, model_key)
 
 async def pay_with_money_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):

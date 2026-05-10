@@ -17,7 +17,7 @@ class AITunnelService:
         self.base_url = "https://api.aitunnel.ru/v1"
         self.model_name = info["api_model"]
         self.size = info.get("size", "1024x1024")
-        self.batch_size = info.get("batch_size", 4)  # по умолчанию 4
+        self.batch_size = info.get("batch_size", 4)
         self.model_type = info.get("type", "chat")
         logger.info(f"AITunnelService: model={self.model_name}, type={self.model_type}, batch={self.batch_size}")
 
@@ -39,7 +39,7 @@ class AITunnelService:
         prompt += " Face clearly visible, exact facial features as in the reference image."
         prompt += " One single image, no collages, no grids, no multiple frames. Single photograph."
 
-        if self.model_type == "edits":
+        if self.model_type in ("edits", "edits_high"):
             prompt += " Change only the background, lighting, and scene. Preserve the subject's face, pose, appearance, and clothing."
 
         # Референсное фото
@@ -106,7 +106,7 @@ class AITunnelService:
                         logger.warning(f"Фото {i+1} не получено после 3 попыток")
                     await asyncio.sleep(0.3)
 
-            else:  # self.model_type == "edits" – для Flux
+            else:  # self.model_type in ("edits", "edits_high")
                 url = f"{self.base_url}/images/edits"
                 headers = {"Authorization": f"Bearer {self.api_key}"}
                 for i in range(self.batch_size):
@@ -116,7 +116,10 @@ class AITunnelService:
                     form_data.add_field('prompt', prompt)
                     form_data.add_field('n', '1')
                     form_data.add_field('size', self.size)
-                    logger.info(f"Flux запрос {i+1}/{self.batch_size}")
+                    # Для высокой детализации добавляем quality
+                    if self.model_type == "edits_high":
+                        form_data.add_field('quality', 'high')
+                    logger.info(f"GPT/Flux запрос {i+1}/{self.batch_size}")
                     success = False
                     for attempt in range(3):
                         try:

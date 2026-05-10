@@ -15,11 +15,11 @@ class Config:
     YKASSA_SHOP_ID = int(os.getenv("YKASSA_SHOP_ID", 0))
     YKASSA_SECRET_KEY = os.getenv("YKASSA_SECRET_KEY", "")
 
-    # ==================== Пакетная фотосессия (4 фото) ====================
+    # ==================== Пакетная фотосессия ====================
     PACKAGE_MODELS = {
         "gemini": {
-            "name": "✨ Gemini 3 Pro (высокое качество, точное лицо)",
-            "price_rub": 80,          # 4 фото по ~20₽
+            "name": "✨ Gemini 3 Pro (пакет 4 фото, высокое качество)",
+            "price_rub": 80,
             "price_tokens": 4,
             "api_model": "gemini-3-pro-image-preview",
             "size": "1024x1024",
@@ -27,13 +27,22 @@ class Config:
             "type": "chat"
         },
         "flux": {
-            "name": "⚡ Flux.2 Flex (быстро, доступно, точное лицо)",
-            "price_rub": 35,          # 4 фото по 8.64₽ ≈ 35₽
+            "name": "⚡ Flux.2 Flex (пакет 4 фото, быстро, доступно)",
+            "price_rub": 35,
             "price_tokens": 2,
             "api_model": "flux.2-flex",
             "size": "1024x1024",
             "batch_size": 4,
             "type": "edits"
+        },
+        "gpt_image_single": {
+            "name": "⚡ GPT Image 2 (одиночное фото, максимальное качество)",
+            "price_rub": 50,
+            "price_tokens": 3,
+            "api_model": "gpt-image-2",
+            "size": "1536x1024",
+            "batch_size": 1,
+            "type": "edits_high"
         }
     }
 
@@ -47,7 +56,7 @@ class Config:
     RECOMMENDED_PHOTOS = 4
     ADMIN_IDS = [int(x) for x in os.getenv("ADMIN_IDS", "955206480,5063386675").split(",") if x.strip()]
 
-    # ==================== СТИЛИ (общие промпты) ====================
+    # ==================== СТИЛИ ====================
     STYLES = {
         "luxury_interior": {
             "name": "🏠 Интерьерная съемка",
