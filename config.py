@@ -15,10 +15,13 @@ class Config:
     YKASSA_SHOP_ID = int(os.getenv("YKASSA_SHOP_ID", 0))
     YKASSA_SECRET_KEY = os.getenv("YKASSA_SECRET_KEY", "")
 
+    # ==================== БАЗА ДАННЫХ (добавлено) ====================
+    DATABASE_URL = os.getenv("DATABASE_URL", "")
+
     # ==================== Пакетная фотосессия ====================
     PACKAGE_MODELS = {
         "gemini": {
-            "name": "✨ Gemini 3 Pro (пакет 4 фото, высокое качество)",
+            "name": "✨ Gemini 3 Pro (высокое качество, точное лицо)",
             "price_rub": 80,
             "price_tokens": 4,
             "api_model": "gemini-3-pro-image-preview",
@@ -27,7 +30,7 @@ class Config:
             "type": "chat"
         },
         "flux": {
-            "name": "⚡ Flux.2 Flex (пакет 4 фото, быстро, доступно)",
+            "name": "⚡ Flux.2 Flex (быстро, доступно, точное лицо)",
             "price_rub": 35,
             "price_tokens": 2,
             "api_model": "flux.2-flex",
@@ -35,8 +38,8 @@ class Config:
             "batch_size": 4,
             "type": "edits"
         },
-        "gpt_image_single": {
-            "name": "⚡ GPT Image 2 (одиночное фото, максимальное качество)",
+        "gpt_single": {
+            "name": "⚡ GPT Image 2 (максимальное качество, 1 фото)",
             "price_rub": 50,
             "price_tokens": 3,
             "api_model": "gpt-image-2",
